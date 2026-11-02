@@ -1,0 +1,75 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:c="clr-namespace:GitKnife.Controls">
+    <!-- 自作コントロールの既定スタイル -->
+
+    <Style TargetType="c:ToolbarButton">
+        <Setter Property="Foreground" Value="{DynamicResource Gk.Icon}"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="MinWidth" Value="42"/>
+        <Setter Property="Height" Value="34"/>
+        <Setter Property="Margin" Value="0,3"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="c:ToolbarButton">
+                    <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="4" Padding="6,1">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="20"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Path Style="{StaticResource Gk.IconPath}" Data="{TemplateBinding Icon}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="LabelText" Grid.Row="1" Text="{TemplateBinding Label}" FontSize="11" HorizontalAlignment="Center" Foreground="{TemplateBinding Foreground}"/>
+                            <!-- 数字のバッジ：アイコンの右上に重ね、ボタンの枠の内側に収める（はみ出すと切れる） -->
+                            <Border x:Name="BadgeBorder" Grid.Row="0" HorizontalAlignment="Right" VerticalAlignment="Top"
+                                    MinWidth="13" Height="13" CornerRadius="6.5" Background="{DynamicResource Gk.Button.Hover}">
+                                <TextBlock x:Name="BadgeText" Text="{Binding Badge, RelativeSource={RelativeSource TemplatedParent}}" FontSize="9" Foreground="{DynamicResource Gk.Text}" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="3,0,3,1"
+                                           AutomationProperties.AutomationId="{TemplateBinding BadgeAutomationId}"/>
+                            </Border>
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Gk.Button.Hover}"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Gk.Button.Pressed}"/>
+                        </Trigger>
+                        <Trigger Property="Badge" Value="0">
+                            <Setter TargetName="BadgeBorder" Property="Visibility" Value="Collapsed"/>
+                        </Trigger>
+                        <Trigger Property="Label" Value="{x:Null}">
+                            <Setter TargetName="LabelText" Property="Visibility" Value="Collapsed"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.4"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="c:DropDownArrowButton">
+        <Setter Property="Foreground" Value="{DynamicResource Gk.Text.Dim}"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Width" Value="14"/>
+        <Setter Property="Height" Value="34"/>
+        <Setter Property="Margin" Value="0,3"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="c:DropDownArrowButton">
+                    <Border x:Name="Bd" Background="Transparent" CornerRadius="3">
+                        <Path Data="M1,0 L4,3 L7,0" Stroke="{TemplateBinding Foreground}" StrokeThickness="1.2" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,8"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Gk.Button.Hover}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+</ResourceDictionary>

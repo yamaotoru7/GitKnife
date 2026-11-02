@@ -1,0 +1,261 @@
+<UserControl x:Class="GitKnife.Views.RevisionListView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:GitKnife.Controls"
+             xmlns:local="clr-namespace:GitKnife"
+             xmlns:vm="clr-namespace:GitKnife.ViewModels"
+             AutomationProperties.AutomationId="RevisionListViewUserControl"
+             Background="{DynamicResource Gk.List.Background}">
+    <!-- コミット一覧。1 行 23px、仮想化した ListBox に自前のグラフ描画を載せる -->
+    <UserControl.Resources>
+        <SolidColorBrush x:Key="Gk.Find.Highlight" Color="#B07600"/>
+        <!--
+          ラベル：
+          ・リモートブランチ（origin/main）：1 つの枠の左が暗い区画で灰色の雲、右が色付きで名前
+          ・upstream と同じ位置にあるローカルブランチ（bugfix/greeting、今のブランチの master も）：前に雲だけの暗い小さな枠を別に置き、続けて普段のラベル
+        -->
+        <DataTemplate x:Key="RefLabelTemplate" DataType="{x:Type vm:RefLabel}">
+            <StackPanel Orientation="Horizontal" Margin="0,0,4,0">
+                <Border x:Name="SyncChip" CornerRadius="3" BorderThickness="1" Height="17" Width="19" Margin="0,0,3,0" Visibility="Collapsed"
+                        Background="{DynamicResource Gk.List.Background}">
+                    <Border.BorderBrush>
+                        <MultiBinding Converter="{StaticResource Gk.RefLabelBrush}" ConverterParameter="border">
+                            <Binding/>
+                            <Binding Path="DataContext" RelativeSource="{RelativeSource AncestorType=ItemsControl}"/>
+                        </MultiBinding>
+                    </Border.BorderBrush>
+                    <Path Data="{StaticResource Icon.Remote}" Stroke="{DynamicResource Gk.Text.Dim}" StrokeThickness="1.3" Width="16" Height="16" Margin="0,-1,0,0"
+                          RenderTransformOrigin="0.5,0.5" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" HorizontalAlignment="Center">
+                        <Path.RenderTransform><ScaleTransform ScaleX="0.75" ScaleY="0.75"/></Path.RenderTransform>
+                    </Path>
+                </Border>
+                <Border x:Name="LabelBorder" CornerRadius="3" BorderThickness="1" Height="17">
+                    <Border.Background>
+                        <MultiBinding Converter="{StaticResource Gk.RefLabelBrush}" ConverterParameter="background">
+                            <Binding/>
+                            <Binding Path="DataContext" RelativeSource="{RelativeSource AncestorType=ItemsControl}"/>
+                        </MultiBinding>
+                    </Border.Background>
+                    <Border.BorderBrush>
+                        <MultiBinding Converter="{StaticResource Gk.RefLabelBrush}" ConverterParameter="border">
+                            <Binding/>
+                            <Binding Path="DataContext" RelativeSource="{RelativeSource AncestorType=ItemsControl}"/>
+                        </MultiBinding>
+                    </Border.BorderBrush>
+                    <StackPanel Orientation="Horizontal">
+                        <!-- リモートブランチの左の暗い区画（雲） -->
+                        <Border x:Name="RemotePart" Background="{DynamicResource Gk.List.Background}" CornerRadius="2,0,0,2" Width="18" Visibility="Collapsed"
+                                BorderThickness="0,0,1,0">
+                            <Border.BorderBrush>
+                                <MultiBinding Converter="{StaticResource Gk.RefLabelBrush}" ConverterParameter="border">
+                                    <Binding/>
+                                    <Binding Path="DataContext" RelativeSource="{RelativeSource AncestorType=ItemsControl}"/>
+                                </MultiBinding>
+                            </Border.BorderBrush>
+                            <Path Data="{StaticResource Icon.Remote}" Stroke="{DynamicResource Gk.Text.Dim}" StrokeThickness="1.3" Width="16" Height="16" Margin="0,-1,0,0"
+                                  RenderTransformOrigin="0.5,0.5" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" HorizontalAlignment="Center">
+                                <Path.RenderTransform><ScaleTransform ScaleX="0.75" ScaleY="0.75"/></Path.RenderTransform>
+                            </Path>
+                        </Border>
+                        <StackPanel Orientation="Horizontal" Margin="3,0,4,1">
+                            <Path x:Name="LabelIcon" Data="{Binding Converter={StaticResource Gk.RefLabelIcon}}" Stroke="{DynamicResource Gk.Label.Text}" StrokeThickness="1.3" Width="16" Height="16"
+                                  Margin="-2,-1,0,0" RenderTransformOrigin="0.5,0.5" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round">
+                                <Path.RenderTransform><ScaleTransform ScaleX="0.75" ScaleY="0.75"/></Path.RenderTransform>
+                            </Path>
+                            <TextBlock local:Highlight.Text="{Binding Text}" local:Highlight.Term="{Binding DataContext.ListHighlightTerm, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                       local:Highlight.Brush="{StaticResource Gk.Find.Highlight}" FontSize="11.5" Foreground="{DynamicResource Gk.Label.Text}" VerticalAlignment="Center"
+                                       LineStackingStrategy="BlockLineHeight" LineHeight="15"/>
+                            <!-- 行の高さを 15 に固定（Yu Gothic UI は行が高く、枠の中で "g" の下が切れた） -->
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsSynced}" Value="True">
+                    <Setter TargetName="SyncChip" Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="RemoteBranch">
+                    <Setter TargetName="RemotePart" Property="Visibility" Value="Visible"/>
+                    <Setter TargetName="LabelIcon" Property="Visibility" Value="Collapsed"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="LocalBranch">
+                    <Setter TargetName="LabelIcon" Property="Visibility" Value="Collapsed"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+        <DataTemplate x:Key="HorizontalRowTemplate" DataType="{x:Type vm:CommitRow}">
+            <Grid Height="23" Background="Transparent">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="{Binding Graph.Width, Converter={StaticResource Gk.GraphWidth}}"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="68"/>
+                    <ColumnDefinition Width="130"/>
+                </Grid.ColumnDefinitions>
+                <c:GraphCell Grid.Column="0" Row="{Binding Graph}" IsHead="{Binding IsHead}"/>
+        
+                <!-- ラベル + 件名 -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="4,0,8,0" ClipToBounds="True">
+                    <!-- push / pull するコミットの点 -->
+                    <Ellipse Width="5" Height="5" Margin="1,0,6,0" VerticalAlignment="Center" Visibility="{Binding HasSyncMark, Converter={StaticResource Gk.BoolToVisibility}}"
+                             Fill="{Binding Sync, Converter={x:Static local:SyncMarkBrushConverter.Instance}}"/>
+                    <ItemsControl ItemsSource="{Binding Labels}" Focusable="False" VerticalAlignment="Center" ItemTemplate="{StaticResource RefLabelTemplate}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                    <TextBlock x:Name="Subject" local:Highlight.BoldPrefix="True" local:Highlight.Text="{Binding Commit.Subject}" local:Highlight.Term="{Binding DataContext.ListHighlightTerm, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                               local:Highlight.Brush="{StaticResource Gk.Find.Highlight}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock x:Name="Desc" Text=" ↩" VerticalAlignment="Center" Foreground="{DynamicResource Gk.Text.Dim}" Visibility="Collapsed"/>
+                </StackPanel>
+        
+                <!-- 作者 -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <c:Avatar Width="16" Height="16" NameText="{Binding Commit.AuthorName}" Email="{Binding Commit.AuthorEmail}" Margin="0,0,6,0"/>
+                    <TextBlock x:Name="Author" local:Highlight.Text="{Binding Commit.AuthorName}" local:Highlight.Term="{Binding DataContext.ListHighlightTerm, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                               local:Highlight.Brush="{StaticResource Gk.Find.Highlight}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                </StackPanel>
+                <TextBlock x:Name="Sha" Grid.Column="3" local:Highlight.Text="{Binding Commit.ShortSha, Mode=OneWay}" local:Highlight.Term="{Binding DataContext.ListHighlightTerm, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                           local:Highlight.Brush="{StaticResource Gk.Find.Highlight}" VerticalAlignment="Center" Foreground="{DynamicResource Gk.Text}"
+                           FontFamily="{StaticResource Gk.UiFont}" TextTrimming="None" ClipToBounds="True"/>
+                <TextBlock x:Name="Date" Grid.Column="4" Text="{Binding DateText, Mode=OneWay}" VerticalAlignment="Center"/>
+            </Grid>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Commit.HasDescription}" Value="True">
+                    <Setter TargetName="Desc" Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsHead}" Value="True">
+                    <Setter TargetName="Subject" Property="FontWeight" Value="SemiBold"/>
+                    <Setter TargetName="Author" Property="FontWeight" Value="SemiBold"/>
+                    <Setter TargetName="Date" Property="FontWeight" Value="SemiBold"/>
+                    <Setter TargetName="Sha" Property="FontWeight" Value="SemiBold"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsReachableFromHead}" Value="False">
+                    <Setter TargetName="Subject" Property="Opacity" Value="0.6"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+        <!-- 縦レイアウト（Appearance > Vertical）：1 行 42px、上にアバター・作者・SHA・日付（右）、下にラベルと件名、行の間に細い線 -->
+        <DataTemplate x:Key="VerticalRowTemplate" DataType="{x:Type vm:CommitRow}">
+            <Grid Height="42" Background="Transparent">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="{Binding Graph.Width, Converter={StaticResource Gk.GraphWidth}}"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <c:GraphCell Grid.Column="0" Row="{Binding Graph}" IsHead="{Binding IsHead}"/>
+                <Border Grid.Column="1" BorderBrush="{DynamicResource Gk.Splitter}" BorderThickness="0,0,0,1" Margin="4,0,0,0">
+                    <Grid Margin="0,0,8,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="20"/>
+                            <RowDefinition Height="21"/>
+                        </Grid.RowDefinitions>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <c:Avatar Width="16" Height="16" NameText="{Binding Commit.AuthorName}" Email="{Binding Commit.AuthorEmail}" Margin="0,0,6,0"/>
+                            <TextBlock x:Name="VAuthor" local:Highlight.Text="{Binding Commit.AuthorName}" local:Highlight.Term="{Binding DataContext.ListHighlightTerm, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                       local:Highlight.Brush="{StaticResource Gk.Find.Highlight}" Foreground="{DynamicResource Gk.Text.Dim}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                            <TextBlock x:Name="VSha" local:Highlight.Text="{Binding Commit.ShortSha, Mode=OneWay}" local:Highlight.Term="{Binding DataContext.ListHighlightTerm, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                       local:Highlight.Brush="{StaticResource Gk.Find.Highlight}" Foreground="{DynamicResource Gk.Text.Dim}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <TextBlock x:Name="VDate" Text="{Binding DateOnlyText, Mode=OneWay}" Foreground="{DynamicResource Gk.Text.Dim}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                        <StackPanel Grid.Row="1" Orientation="Horizontal" VerticalAlignment="Center" ClipToBounds="True">
+                            <!-- push / pull するコミットの点 -->
+                    <Ellipse Width="5" Height="5" Margin="1,0,6,0" VerticalAlignment="Center" Visibility="{Binding HasSyncMark, Converter={StaticResource Gk.BoolToVisibility}}"
+                             Fill="{Binding Sync, Converter={x:Static local:SyncMarkBrushConverter.Instance}}"/>
+                    <ItemsControl ItemsSource="{Binding Labels}" Focusable="False" VerticalAlignment="Center" ItemTemplate="{StaticResource RefLabelTemplate}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                            </ItemsControl>
+                            <TextBlock x:Name="VSubject" local:Highlight.BoldPrefix="True" local:Highlight.Text="{Binding Commit.Subject}" local:Highlight.Term="{Binding DataContext.ListHighlightTerm, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                       local:Highlight.Brush="{StaticResource Gk.Find.Highlight}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                            <TextBlock x:Name="VDesc" Text=" ↩" VerticalAlignment="Center" Foreground="{DynamicResource Gk.Text.Dim}" Visibility="Collapsed"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Commit.HasDescription}" Value="True">
+                    <Setter TargetName="VDesc" Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsHead}" Value="True">
+                    <Setter TargetName="VSubject" Property="FontWeight" Value="SemiBold"/>
+                    <Setter TargetName="VAuthor" Property="FontWeight" Value="SemiBold"/>
+                    <Setter TargetName="VAuthor" Property="Foreground" Value="{DynamicResource Gk.Text}"/>
+                    <Setter TargetName="VSha" Property="FontWeight" Value="SemiBold"/>
+                    <Setter TargetName="VSha" Property="Foreground" Value="{DynamicResource Gk.Text}"/>
+                    <Setter TargetName="VDate" Property="FontWeight" Value="SemiBold"/>
+                    <Setter TargetName="VDate" Property="Foreground" Value="{DynamicResource Gk.Text}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsReachableFromHead}" Value="False">
+                    <Setter TargetName="VSubject" Property="Opacity" Value="0.6"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+    </UserControl.Resources>
+    <DockPanel>
+    <!-- Ctrl+F の検索パネル（RevisionSearchPanelUserControl）："Search SHA, branch, author or message"、"4 matches"、前・次・閉じる -->
+    <UserControl x:Name="FindPanel" DockPanel.Dock="Top" AutomationProperties.AutomationId="RevisionSearchPanelUserControl" DataContext="{Binding Find}"
+                 Visibility="{Binding IsOpen, Converter={StaticResource Gk.BoolToVisibility}}" Background="{DynamicResource Gk.Header.Background}">
+        <Grid Margin="6,4,6,4">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBox x:Name="FindBox" AutomationProperties.AutomationId="SearchTextBox" Style="{StaticResource Gk.TextBox}" Height="22" Padding="16,0,80,0"
+                     Text="{Binding Query, UpdateSourceTrigger=PropertyChanged}" PreviewKeyDown="FindBox_PreviewKeyDown"/>
+            <Path AutomationProperties.AutomationId="IconElement" Data="{StaticResource Icon.Search}" Stroke="{DynamicResource Gk.Text.Faint}" StrokeThickness="1.2" Width="16" Height="16"
+                  HorizontalAlignment="Left" Margin="4,0,0,0" IsHitTestVisible="False" RenderTransformOrigin="0.5,0.5">
+                <Path.RenderTransform><ScaleTransform ScaleX="0.75" ScaleY="0.75"/></Path.RenderTransform>
+            </Path>
+            <TextBlock Text="Search SHA, branch, author or message" Foreground="{DynamicResource Gk.Text.Faint}" Margin="22,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding Text, ElementName=FindBox}" Value="">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+            <TextBlock AutomationProperties.AutomationId="MatchesTextBlock" Text="{Binding MatchesText}" FontSize="11.5" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,8,0" IsHitTestVisible="False"/>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="2,0,0,0">
+                <Button Style="{StaticResource Gk.FlatButton}" Width="22" Height="22" Margin="2,0,0,0" Padding="0" Focusable="False" ToolTip="Previous (Shift+Enter)" Click="FindPrevious_Click">
+                    <Path Style="{StaticResource Gk.IconPath}" Data="{StaticResource Icon.ChevronLeft}"/>
+                </Button>
+                <Button Style="{StaticResource Gk.FlatButton}" Width="22" Height="22" Margin="2,0,0,0" Padding="0" Focusable="False" ToolTip="Next (Enter)" Click="FindNext_Click">
+                    <Path Style="{StaticResource Gk.IconPath}" Data="{StaticResource Icon.ChevronRight}"/>
+                </Button>
+                <Button Style="{StaticResource Gk.FlatButton}" Width="22" Height="22" Margin="2,0,0,0" Padding="0" Focusable="False" ToolTip="Close (Esc)" Click="FindClose_Click">
+                    <Path Style="{StaticResource Gk.IconPath}" Data="{StaticResource Icon.Close}"/>
+                </Button>
+            </StackPanel>
+        </Grid>
+    </UserControl>
+    <!-- 一覧の上の帯：
+         "Filtered by: 'feature/*', 'origin/feature/*'  Clear filter"、Reflog のときは "Reflog mode enabled  Exit" -->
+    <Border DockPanel.Dock="Top" Height="22" Background="{DynamicResource Gk.Header.Background}" BorderBrush="{DynamicResource Gk.Splitter}" BorderThickness="0,0,0,1"
+            AutomationProperties.AutomationId="RevisionListStatusBarUserControl"
+            Visibility="{Binding ShowStatusBar, Converter={StaticResource Gk.BoolToVisibility}}">
+        <StackPanel Orientation="Horizontal" Margin="8,0" VerticalAlignment="Center">
+            <TextBlock AutomationProperties.AutomationId="HeaderTextBlock" Text="{Binding StatusBarHeader}" VerticalAlignment="Center"/>
+            <TextBlock AutomationProperties.AutomationId="ReferencesTextBlock" Text="{Binding FilterBarText}" VerticalAlignment="Center" Margin="6,0,0,0"
+                       Visibility="{Binding IsFiltered, Converter={StaticResource Gk.BoolToVisibility}}"/>
+            <Button AutomationProperties.AutomationId="StatusBarButton" Content="{Binding StatusBarButtonText}" Command="{Binding StatusBarButtonCommand}"
+                    Style="{StaticResource Gk.FlatButton}" Foreground="{DynamicResource Gk.Accent}" Padding="2,0" Margin="6,0,0,0" Height="22" Cursor="Hand"/>
+        </StackPanel>
+    </Border>
+    <Grid>
+    <ListBox x:Name="List" AutomationProperties.AutomationId="RevisionListView" Style="{StaticResource Gk.ListBox}" SelectionMode="Extended" ContextMenuOpening="List_ContextMenuOpening" SelectionChanged="List_SelectionChanged"
+             ItemsSource="{Binding Commits}" SelectedItem="{Binding SelectedCommit}" ItemContainerStyle="{StaticResource Gk.CommitRow}" ItemTemplate="{StaticResource HorizontalRowTemplate}"
+             Padding="0,2,0,0">
+        <!-- 右クリックで中身を作る（空のメニューを置いておかないと ContextMenuOpening が来ない） -->
+        <ListBox.ContextMenu>
+            <ContextMenu/>
+        </ListBox.ContextMenu>
+    </ListBox>
+    <c:MatchMarkers x:Name="Markers"/>
+    </Grid>
+    </DockPanel>
+</UserControl>

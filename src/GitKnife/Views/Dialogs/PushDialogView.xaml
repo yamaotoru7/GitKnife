@@ -1,0 +1,42 @@
+<UserControl x:Class="GitKnife.Views.Dialogs.PushDialogView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:GitKnife.Controls">
+    <!--
+      Push：Branch（toggleButton）、Remote（RemotesLabel / RemotesComboBox。リモートが 1 つなら出さない）、To（toggleButton。"default (origin/main)" / "new (origin/x)"）、
+      CreateTrackingReferenceCheckBox（新しいブランチのときだけ）、AllTagsCheckBox、ForcePushWarningImage + ForcePushCheckBox
+    -->
+    <!-- 題名の位置から（アイコンの列 64 + 間 16）。ラベルの列は中身に合わせる（Form と同じ） -->
+    <Grid Margin="80,0,0,0">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="32"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="32"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="25"/>
+            <RowDefinition Height="25"/>
+        </Grid.RowDefinitions>
+        <TextBlock Text="Branch:" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,8,0"/>
+        <c:RefPicker Grid.Column="1" Items="{Binding Branches}" SelectedItem="{Binding SelectedBranch}" Icon="{StaticResource Icon.Branch}"/>
+
+        <TextBlock Grid.Row="1" AutomationProperties.AutomationId="RemotesLabel" Text="Remote:" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,8,0"
+                   Visibility="{Binding ShowRemotes, Converter={StaticResource Gk.BoolToVisibility}}"/>
+        <ComboBox Grid.Row="1" Grid.Column="1" AutomationProperties.AutomationId="RemotesComboBox" ItemsSource="{Binding Remotes}" SelectedItem="{Binding SelectedRemote}" ItemTemplate="{StaticResource Gk.RemoteItemTemplate}" Margin="0,4"
+                  Visibility="{Binding ShowRemotes, Converter={StaticResource Gk.BoolToVisibility}}"/>
+
+        <TextBlock Grid.Row="2" Text="To:" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,8,0"/>
+        <c:RefPicker Grid.Row="2" Grid.Column="1" Items="{Binding Targets}" SelectedItem="{Binding SelectedTarget}" DisplayText="{Binding TargetDisplay}" Icon="{StaticResource Icon.Branch}"/>
+
+        <CheckBox Grid.Row="3" Grid.Column="1" AutomationProperties.AutomationId="CreateTrackingReferenceCheckBox" Content="Create tracking reference" IsChecked="{Binding CreateTracking}"
+                  Margin="0,4" Visibility="{Binding IsNewBranch, Converter={StaticResource Gk.BoolToVisibility}}"/>
+        <CheckBox Grid.Row="4" Grid.Column="1" AutomationProperties.AutomationId="AllTagsCheckBox" Content="Push all ta_gs" IsChecked="{Binding AllTags}" VerticalAlignment="Center"/>
+        <c:IconImage Grid.Row="5" AutomationProperties.AutomationId="ForcePushWarningImage" Geometry="{StaticResource Icon.Bell}" Stroke="{DynamicResource Gk.Change.Modified}"
+                     HorizontalAlignment="Right" Margin="0,0,8,0" ToolTip="Force push can overwrite remote changes"
+                     Visibility="{Binding Force, Converter={StaticResource Gk.BoolToVisibility}, ConverterParameter=hidden}"/>
+        <CheckBox Grid.Row="5" Grid.Column="1" AutomationProperties.AutomationId="ForcePushCheckBox" Content="_Force push" IsChecked="{Binding Force}" VerticalAlignment="Center"/>
+    </Grid>
+</UserControl>

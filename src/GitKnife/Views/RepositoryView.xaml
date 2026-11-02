@@ -1,0 +1,46 @@
+<UserControl x:Class="GitKnife.Views.RepositoryView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:GitKnife.Controls"
+             xmlns:v="clr-namespace:GitKnife.Views"
+             xmlns:vm="clr-namespace:GitKnife.ViewModels">
+    <!--
+      1 タブの中身。左がサイドバー、右が All Commits（コミット一覧 + 詳細）か Local Changes。
+      
+    -->
+    <DockPanel>
+    <!-- 進行中の操作（merge / rebase / cherry-pick / revert）の帯 -->
+    <v:NotificationBarView DockPanel.Dock="Top"/>
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition x:Name="SidebarColumn" Width="339" MinWidth="180"/>
+            <ColumnDefinition Width="1"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <v:SidebarView Grid.Column="0"/>
+        <GridSplitter Grid.Column="1" AutomationProperties.AutomationId="SidebarGridSplitter" Style="{StaticResource Gk.SplitterStyle}" Width="1" HorizontalAlignment="Stretch" ResizeBehavior="PreviousAndNext"/>
+
+        <!-- All Commits -->
+        <Grid Grid.Column="2" x:Name="AllCommitsPanel">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" MinHeight="80"/>
+                <RowDefinition x:Name="DetailsSplitterRow" Height="1"/>
+                <RowDefinition x:Name="DetailsRow" Height="*" MinHeight="80"/>
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="ListColumn" Width="*"/>
+                <ColumnDefinition x:Name="ListSplitterColumn" Width="0"/>
+                <ColumnDefinition x:Name="DetailsColumn" Width="0"/>
+            </Grid.ColumnDefinitions>
+            <v:RevisionListView x:Name="ListView" Grid.Row="0"/>
+            <GridSplitter x:Name="ListSplitter" Grid.Row="1" AutomationProperties.AutomationId="VerticalGridSplitter" Style="{StaticResource Gk.SplitterStyle}" Height="1" HorizontalAlignment="Stretch" ResizeBehavior="PreviousAndNext"
+                          DragCompleted="ListSplitter_DragCompleted"/>
+            <v:RevisionDetailsView x:Name="DetailsView" Grid.Row="2"/>
+        </Grid>
+
+        <!-- Local Changes -->
+        <v:LocalChangesView Grid.Column="2" x:Name="LocalChangesPanel"/>
+    </Grid>
+    </DockPanel>
+</UserControl>

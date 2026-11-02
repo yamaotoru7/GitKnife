@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/GitKnife.AskPass/GitKnife.AskPass.csproj" />
+    <Project Path="src/GitKnife.Core/GitKnife.Core.csproj" />
+    <Project Path="src/GitKnife.RI/GitKnife.RI.csproj" />
+    <Project Path="src/GitKnife/GitKnife.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/GitKnife.Core.Tests/GitKnife.Core.Tests.csproj" />
+  </Folder>
+</Solution>

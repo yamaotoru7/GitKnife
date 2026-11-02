@@ -1,0 +1,331 @@
+<UserControl x:Class="GitKnife.Views.RevisionDetailsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:GitKnife.Controls"
+             xmlns:vm="clr-namespace:GitKnife.ViewModels"
+             xmlns:v="clr-namespace:GitKnife.Views"
+             xmlns:local="clr-namespace:GitKnife"
+             xmlns:ae="http://icsharpcode.net/sharpdevelop/avalonedit"
+             AutomationProperties.AutomationId="RevisionDetails"
+             Background="{DynamicResource Gk.Details.Background}">
+    <!-- コミット詳細。Changes と File Tree は T502 で -->
+    <Grid x:Name="Root">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="32"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Border x:Name="TabBar" Background="{DynamicResource Gk.Header.Background}" BorderBrush="{DynamicResource Gk.Splitter}" BorderThickness="0,0,0,1">
+            <Grid>
+                <StackPanel Orientation="Horizontal">
+                    <RadioButton AutomationProperties.AutomationId="CommitRadioButton" Content="Commit" Style="{StaticResource Gk.UnderlineTab}" GroupName="Details" IsEnabled="{Binding Details.IsNotComparing}"
+                                 IsChecked="{Binding DetailsMode, Converter={StaticResource Gk.EnumEquals}, ConverterParameter=Commit}"/>
+                    <RadioButton AutomationProperties.AutomationId="ChangesRadioButton" Content="Changes" Style="{StaticResource Gk.UnderlineTab}" GroupName="Details"
+                                 IsChecked="{Binding DetailsMode, Converter={StaticResource Gk.EnumEquals}, ConverterParameter=Changes}"/>
+                    <RadioButton x:Name="FileTreeRadio" AutomationProperties.AutomationId="FileTreeRadioButton" Content="File Tree" Style="{StaticResource Gk.UnderlineTab}" GroupName="Details" IsEnabled="{Binding Details.IsNotComparing}"
+                                 IsChecked="{Binding DetailsMode, Converter={StaticResource Gk.EnumEquals}, ConverterParameter=FileTree}"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,8,0">
+                    <Button x:Name="SeparateWindowButton" AutomationProperties.AutomationId="ShowRevisionInSeparateWindowButton" Click="SeparateWindow_Click" Style="{StaticResource Gk.FlatButton}" ToolTip="Open in separate window" Margin="0,0,10,0">
+                        <Path Style="{StaticResource Gk.IconPath}" Data="{StaticResource Icon.ExternalWindow}"/>
+                    </Button>
+                    <Button x:Name="CollapseButton" AutomationProperties.AutomationId="CollapseDetailsButton" Click="Collapse_Click" Style="{StaticResource Gk.FlatButton}" ToolTip="Hide Commit Details (Ctrl+Shift+D)">
+                        <Path Style="{StaticResource Gk.IconPath}" Data="{StaticResource Icon.Collapse}"/>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Commit モード（SummaryUserControl） -->
+        <Grid x:Name="CommitPane" Grid.Row="1" Grid.RowSpan="2" Visibility="{Binding DetailsMode, Converter={x:Static local:EnumToVisibilityConverter.Instance}, ConverterParameter=Commit}">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" AutomationProperties.AutomationId="SummaryUserControl"
+                      DataContext="{Binding SelectedCommit}" Visibility="{Binding Converter={StaticResource Gk.NotEmptyToVisibility}}">
+            <StackPanel Margin="20,10,20,10">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="78"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <c:Avatar Grid.Row="0" Grid.RowSpan="2" Width="42" Height="42" NameText="{Binding Commit.AuthorName}" Email="{Binding Commit.AuthorEmail}"
+                              HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,23,14,-40" AutomationProperties.AutomationId="AuthorAvatarImage"/>
+                    <TextBlock Grid.Column="1" Text="AUTHOR" FontSize="11" Foreground="{DynamicResource Gk.Text.Dim}" Margin="0,0,0,10"/>
+                    <StackPanel Grid.Column="1" Grid.Row="1" Margin="0,0,0,18">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock AutomationProperties.AutomationId="AuthorTextBlock" Text="{Binding Commit.AuthorName}" FontWeight="SemiBold" FontSize="13"/>
+                            <TextBlock AutomationProperties.AutomationId="AuthorEmailTextBlock" Text="{Binding Commit.AuthorEmail}" Foreground="{DynamicResource Gk.Text.Dim}" Margin="8,1,0,0"/>
+                        </StackPanel>
+                        <TextBlock AutomationProperties.AutomationId="AuthorDateTextBlock" Text="{Binding Commit.AuthorTime, StringFormat='d M yyyy HH:mm:ss zzz'}" Foreground="{DynamicResource Gk.Text.Dim}" FontSize="11" Margin="0,6,0,0"/>
+                    </StackPanel>
+                    <!-- COMMITTER：作者と人か日時が違うとき、幅の右半分に AUTHOR と同じ形で並べる（rebase したコミットなど） -->
+                    <Grid Grid.ColumnSpan="2" Grid.RowSpan="2" Visibility="{Binding Commit.HasDistinctCommitter, Converter={StaticResource Gk.BoolToVisibility}}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                    <Grid Grid.Column="1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="78"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <c:Avatar Grid.RowSpan="2" Width="42" Height="42" NameText="{Binding Commit.CommitterName}" Email="{Binding Commit.CommitterEmail}"
+                                  HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,23,14,-40" AutomationProperties.AutomationId="CommitterAvatarImage"/>
+                        <TextBlock Grid.Column="1" Text="COMMITTER" FontSize="11" Foreground="{DynamicResource Gk.Text.Dim}" Margin="0,0,0,10"/>
+                        <StackPanel Grid.Column="1" Grid.Row="1">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock AutomationProperties.AutomationId="CommitterTextBlock" Text="{Binding Commit.CommitterName}" FontWeight="SemiBold" FontSize="13"/>
+                                <TextBlock AutomationProperties.AutomationId="CommitterEmailTextBlock" Text="{Binding Commit.CommitterEmail}" Foreground="{DynamicResource Gk.Text.Dim}" Margin="8,1,0,0"/>
+                            </StackPanel>
+                            <TextBlock AutomationProperties.AutomationId="CommitterDateTextBlock" Text="{Binding Commit.CommitTime, StringFormat='d M yyyy HH:mm:ss zzz'}" Foreground="{DynamicResource Gk.Text.Dim}" FontSize="11" Margin="0,6,0,0"/>
+                        </StackPanel>
+                    </Grid>
+                    </Grid>
+
+                    <TextBlock Grid.Row="2" Text="REFS" FontSize="11" Foreground="{DynamicResource Gk.Text.Dim}" HorizontalAlignment="Right" Margin="0,2,16,4"
+                               Visibility="{Binding HasDetailLabels, Converter={StaticResource Gk.BoolToVisibility}}"/>
+                    <ItemsControl Grid.Row="2" Grid.Column="1" ItemsSource="{Binding DetailLabels}" Margin="0,0,0,7" Visibility="{Binding HasDetailLabels, Converter={StaticResource Gk.BoolToVisibility}}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border BorderBrush="{DynamicResource Gk.Label.Border}" BorderThickness="1" CornerRadius="3" Padding="4,0" Margin="0,0,4,0">
+                                    <TextBlock Text="{Binding Text}" FontSize="11.5"/>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock Grid.Row="3" Text="SHA" FontSize="11" Foreground="{DynamicResource Gk.Text.Dim}" HorizontalAlignment="Right" Margin="0,2,16,4"/>
+                    <TextBox Grid.Row="3" Grid.Column="1" AutomationProperties.AutomationId="ShaTextBlock" Text="{Binding Commit.Sha, Mode=OneWay}" IsReadOnly="True"
+                             Background="Transparent" BorderThickness="0" Foreground="{DynamicResource Gk.Text}" Margin="-2,0,0,4" Padding="0"/>
+
+                    <TextBlock Grid.Row="4" Text="PARENTS" FontSize="11" Foreground="{DynamicResource Gk.Text.Dim}" HorizontalAlignment="Right" Margin="0,2,16,4"/>
+                    <ItemsControl Grid.Row="4" Grid.Column="1" ItemsSource="{Binding Commit.DisplayParents}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Style="{StaticResource Gk.FlatButton}" Padding="0" Margin="0,0,8,0" Click="Parent_Click" Tag="{Binding}" AutomationProperties.Name="{Binding Converter={x:Static vm:ShortShaConverter.Instance}}">
+                                    <TextBlock Text="{Binding Converter={x:Static vm:ShortShaConverter.Instance}}" Foreground="{DynamicResource Gk.Link}"/>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Grid>
+
+                <!-- 縦の間隔（AUTHOR から PARENTS、区切り線、件名、ファイルの行） -->
+                <Border BorderBrush="{DynamicResource Gk.Splitter}" BorderThickness="0,1,0,1" Margin="0,16,0,0" Padding="78,10,0,10">
+                    <StackPanel>
+                        <TextBlock AutomationProperties.AutomationId="SubjectTextBlock" c:IssueLinkText.Text="{Binding Commit.Subject}" c:IssueLinkText.Rules="{Binding Repository.IssueRules}" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                        <TextBlock AutomationProperties.AutomationId="DescriptionTextBlock" c:IssueLinkText.Text="{Binding Commit.Body}" c:IssueLinkText.Rules="{Binding Repository.IssueRules}" TextWrapping="Wrap" Margin="0,8,0,0"
+                                   Visibility="{Binding Commit.HasDescription, Converter={StaticResource Gk.BoolToVisibility}}"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- 変更ファイル（DiffEntry）。展開するとその場に diff -->
+                <Grid Margin="0,2,0,0" DataContext="{Binding DataContext.Details, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                    <Button AutomationProperties.AutomationId="ExpandAllButton" Content="{Binding ExpandAllText}" Style="{StaticResource Gk.FlatButton}" Padding="10,3"
+                            HorizontalAlignment="Right" VerticalAlignment="Top" Command="{Binding ToggleExpandAllCommand}" AutomationProperties.Name="{Binding ExpandAllText}"/>
+                    <ItemsControl ItemsSource="{Binding Entries}" Margin="0,22,0,0" Focusable="False">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel>
+                                    <ToggleButton IsChecked="{Binding IsExpanded}" Focusable="False" AutomationProperties.Name="{Binding Item.Path}">
+                                        <ToggleButton.Template>
+                                            <ControlTemplate TargetType="ToggleButton">
+                                                <Border x:Name="Bd" Background="Transparent" Height="20" CornerRadius="3">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <Path x:Name="Chevron" Style="{StaticResource Gk.SmallIcon}" Data="{StaticResource Icon.ChevronRight}" Width="10" Height="10" Margin="18,0,6,0" Stroke="{DynamicResource Gk.Text.Dim}"/>
+                                                        <Border Style="{StaticResource Gk.ChangeBadge}" DataContext="{Binding Item}" Margin="0,0,4,0">
+                                                            <TextBlock Text="{Binding ChangeLetter}" FontSize="10" FontWeight="Bold" Foreground="#FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-1,0,0"/>
+                                                        </Border>
+                                                        <!-- ファイルの種類の OS のアイコン（ファイル一覧と同じ ShellIconConverter） -->
+                                                        <Image Source="{Binding Item.Path, Converter={x:Static c:ShellIconConverter.Instance}}" Width="16" Height="16" Margin="0,0,12,0" VerticalAlignment="Center"/>
+                                                        <TextBlock Text="{Binding Item.Path}" VerticalAlignment="Center" FontSize="13" Foreground="{DynamicResource Gk.Text}"/>
+                                                    </StackPanel>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="{DynamicResource Gk.List.Hover}"/></Trigger>
+                                                    <Trigger Property="IsChecked" Value="True"><Setter TargetName="Chevron" Property="Data" Value="{StaticResource Icon.ChevronDown}"/></Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </ToggleButton.Template>
+                                    </ToggleButton>
+                                    <c:DiffViewer Diff="{Binding Diff}" AutoHeightMax="700" ShowActions="False" Margin="20,2,0,10"
+                                                  Visibility="{Binding IsExpanded, Converter={StaticResource Gk.BoolToVisibility}}"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Grid>
+            </StackPanel>
+        </ScrollViewer>
+        </Grid>
+
+        <!-- RevisionDetailsHeaderUserControl（Changes と File Tree で出る） -->
+            <UserControl x:Name="HeaderPane" Grid.Row="1" MinHeight="24" AutomationProperties.AutomationId="RevisionDetailsHeaderUserControl" DataContext="{Binding Details}"
+                         Visibility="{Binding DataContext.DetailsMode, RelativeSource={RelativeSource AncestorType=v:RevisionDetailsView}, Converter={x:Static local:EnumToVisibilityConverter.Instance}, ConverterParameter=!Commit}">
+            <Border BorderBrush="{DynamicResource Gk.Splitter}" BorderThickness="0,0,0,1" Padding="8,0">
+                <Grid>
+                <StackPanel>
+                <StackPanel Orientation="Horizontal" DataContext="{Binding Commit}" Height="23">
+                    <c:Avatar Width="18" Height="18" NameText="{Binding Commit.AuthorName}" Email="{Binding Commit.AuthorEmail}" Margin="0,0,10,0" AutomationProperties.AutomationId="AuthorAvatarImage"/>
+                    <TextBlock AutomationProperties.AutomationId="AuthorTextBlock" Text="{Binding Commit.AuthorName}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <!-- 比べているときは古い方の SHA を赤、新しい方を緑の地にする -->
+                    <Border VerticalAlignment="Center" Margin="0,0,8,0" CornerRadius="2" Padding="2,0"
+                            Background="{Binding DataContext.IsComparing, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={x:Static local:BoolToBrushConverter.Instance}, ConverterParameter=Gk.Diff.Removed}">
+                        <TextBlock AutomationProperties.AutomationId="ShaTextBlock" Text="{Binding Commit.HeaderSha}" Foreground="{DynamicResource Gk.Text.Dim}" FontSize="11.5"/>
+                    </Border>
+                    <TextBlock AutomationProperties.AutomationId="AuthorDateTextBlock" Text="{Binding DateText}" Foreground="{DynamicResource Gk.Text.Dim}" FontSize="11.5" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    <TextBlock AutomationProperties.AutomationId="SubjectTextBlock" Text="{Binding Commit.Subject}" FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+                <!-- Compare to Local Changes の 2 行目（"?" と "Local Changes ↩"） -->
+                <StackPanel Orientation="Horizontal" Height="23" Visibility="{Binding CompareToLocal, Converter={StaticResource Gk.BoolToVisibility}}">
+                    <Border Width="18" Height="18" CornerRadius="2" Background="{DynamicResource Gk.Accent}" Margin="0,0,10,0">
+                        <TextBlock Text="?" Foreground="White" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <TextBlock AutomationProperties.AutomationId="OtherCustomTextBlock" Text="Local Changes" FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center"/>
+                    <TextBlock Text=" ↩" Foreground="{DynamicResource Gk.Text.Dim}" VerticalAlignment="Center"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" DataContext="{Binding Other}" Height="23"
+                            Visibility="{Binding DataContext.CanSwap, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Gk.BoolToVisibility}}">
+                    <c:Avatar Width="18" Height="18" NameText="{Binding Commit.AuthorName}" Email="{Binding Commit.AuthorEmail}" Margin="0,0,10,0" AutomationProperties.AutomationId="OtherAuthorAvatarImage"/>
+                    <TextBlock AutomationProperties.AutomationId="OtherAuthorTextBlock" Text="{Binding Commit.AuthorName}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <Border VerticalAlignment="Center" Margin="0,0,8,0" CornerRadius="2" Padding="2,0" Background="{DynamicResource Gk.Diff.Added}">
+                        <TextBlock AutomationProperties.AutomationId="OtherShaTextBlock" Text="{Binding Commit.HeaderSha}" Foreground="{DynamicResource Gk.Text.Dim}" FontSize="11.5"/>
+                    </Border>
+                    <TextBlock AutomationProperties.AutomationId="OtherAuthorDateTextBlock" Text="{Binding DateText}" Foreground="{DynamicResource Gk.Text.Dim}" FontSize="11.5" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    <TextBlock AutomationProperties.AutomationId="OtherSubjectTextBlock" Text="{Binding Commit.Subject}" FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+                </StackPanel>
+                <Button AutomationProperties.AutomationId="SwapRevisionsButton" Style="{StaticResource Gk.FlatButton}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                        Width="22" Height="22" ToolTip="Swap revisions" Command="{Binding SwapRevisionsCommand}"
+                        Visibility="{Binding CanSwap, Converter={StaticResource Gk.BoolToVisibility}}">
+                    <Path Style="{StaticResource Gk.IconPath}" Data="{StaticResource Icon.Swap}"/>
+                </Button>
+                </Grid>
+            </Border>
+            </UserControl>
+
+        <!-- Changes モード -->
+        <Grid Grid.Row="2" DataContext="{Binding Details}"
+              Visibility="{Binding DataContext.DetailsMode, RelativeSource={RelativeSource AncestorType=v:RevisionDetailsView}, Converter={x:Static local:EnumToVisibilityConverter.Instance}, ConverterParameter=Changes}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition x:Name="ChangesColumn" Width="280" MinWidth="120"/>
+                    <ColumnDefinition Width="1"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <UserControl AutomationProperties.AutomationId="ChangesUserControl" Background="{DynamicResource Gk.List.Background}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="18"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <Border Background="{DynamicResource Gk.Header.Background}">
+                            <Grid>
+                                <Button Style="{StaticResource Gk.HeaderIconButton}" HorizontalAlignment="Left" ToolTip="Filter" Click="ChangesSearch_Click">
+                                    <Path Style="{StaticResource Gk.SmallIcon}" Data="{StaticResource Icon.Search}"/>
+                                </Button>
+                                <!-- 絞り込み（Local Changes と同じ。Esc / × で閉じると絞り込みも消える） -->
+                                <Grid x:Name="ChangesFilterPanel" Margin="20,0,50,0" Visibility="Collapsed">
+                                    <TextBox x:Name="ChangesFilterTextBox" AutomationProperties.AutomationId="FilterTextBox" Style="{StaticResource Gk.TextBox}" Padding="2,0,16,0"
+                                             FontSize="11" Text="{Binding ChangeFilter, UpdateSourceTrigger=PropertyChanged}" PreviewKeyDown="ChangesFilter_PreviewKeyDown"/>
+                                    <Button AutomationProperties.AutomationId="PART_ClearButton" Style="{StaticResource Gk.HeaderIconButton}" HorizontalAlignment="Right" Width="16" Height="16"
+                                            ToolTip="Close" Click="ChangesFilterClose_Click">
+                                        <Path Style="{StaticResource Gk.IconPath}" Data="{StaticResource Icon.Close}" Width="8" Height="8"/>
+                                    </Button>
+                                </Grid>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,2,0">
+                                    <Button AutomationProperties.AutomationId="ShowDiffPopupButton" Style="{StaticResource Gk.HeaderIconButton}" ToolTip="Show Diff in Popup">
+                                        <Path Style="{StaticResource Gk.SmallIcon}" Data="{StaticResource Icon.Eye}"/>
+                                    </Button>
+                                    <Button AutomationProperties.AutomationId="FileListSettingsDropdownButton" Style="{StaticResource Gk.HeaderIconButton}" ToolTip="File list settings">
+                                        <Path Style="{StaticResource Gk.SmallIcon}" Data="{StaticResource Icon.ListSettings}"/>
+                                    </Button>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                        <UserControl Grid.Row="1" AutomationProperties.AutomationId="FileListUserControl">
+                            <ListView x:Name="ChangesList" Style="{StaticResource Gk.FileListView}" SelectionMode="Single" ItemsSource="{Binding ChangeRows}" SelectedItem="{Binding SelectedChange}"
+                                      SizeChanged="List_SizeChanged" ContextMenuOpening="Changes_ContextMenuOpening">
+                                <ListView.ContextMenu><ContextMenu/></ListView.ContextMenu>
+                                <ListView.View>
+                                    <GridView ColumnHeaderContainerStyle="{StaticResource Gk.HiddenColumnHeader}">
+                                        <GridViewColumn CellTemplate="{StaticResource Gk.FileRowTemplate}"/>
+                                    </GridView>
+                                </ListView.View>
+                            </ListView>
+                        </UserControl>
+                    </Grid>
+                </UserControl>
+                <GridSplitter Grid.Column="1" Style="{StaticResource Gk.SplitterStyle}" Width="1" HorizontalAlignment="Stretch" ResizeBehavior="PreviousAndNext"/>
+                <v:FileDiffPanel x:Name="ChangesDiff" Grid.Column="2" Place="Revision" Diff="{Binding Diff}" Title="{Binding DiffTitle}" OptionsChanged="ChangesDiff_OptionsChanged"/>
+            </Grid>
+        </Grid>
+
+        <!-- File Tree モード -->
+        <UserControl Grid.Row="2" AutomationProperties.AutomationId="FileTreeUserControl" DataContext="{Binding Details}"
+                     Visibility="{Binding DataContext.DetailsMode, RelativeSource={RelativeSource AncestorType=v:RevisionDetailsView}, Converter={x:Static local:EnumToVisibilityConverter.Instance}, ConverterParameter=FileTree}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition x:Name="FileTreeColumn" Width="394" MinWidth="120"/>
+                    <ColumnDefinition Width="1"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <ListView AutomationProperties.AutomationId="FilesTreeView" ItemsSource="{Binding TreeRows}" SelectedItem="{Binding SelectedTreeFile}" SelectionMode="Single" ContextMenuOpening="FileTree_ContextMenuOpening" PreviewMouseRightButtonDown="FileTree_PreviewMouseRightButtonDown"
+                          Background="{DynamicResource Gk.List.Background}" BorderThickness="0" Padding="0,3" Foreground="{DynamicResource Gk.Text}"
+                          ScrollViewer.HorizontalScrollBarVisibility="Disabled" ItemTemplate="{StaticResource Gk.FileRowTemplate}">
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem">
+                            <Setter Property="Margin" Value="2,0"/>
+                            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource Gk.Text}"/>
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListViewItem">
+                                        <Border x:Name="Bd" Background="Transparent" CornerRadius="3">
+                                            <ContentPresenter/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="{DynamicResource Gk.List.Hover}"/></Trigger>
+                                            <Trigger Property="IsSelected" Value="True"><Setter TargetName="Bd" Property="Background" Value="{DynamicResource Gk.Selection}"/></Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListView.ItemContainerStyle>
+                    <ListView.ContextMenu><ContextMenu/></ListView.ContextMenu>
+                </ListView>
+                <GridSplitter Grid.Column="1" Style="{StaticResource Gk.SplitterStyle}" Width="1" HorizontalAlignment="Stretch" ResizeBehavior="PreviousAndNext"/>
+                <Grid Grid.Column="2" Background="{DynamicResource Gk.Diff.Background}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="18"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <Border Background="{DynamicResource Gk.Header.Background}">
+                        <TextBlock Text="{Binding PreviewTitle}" FontSize="11.5" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <ae:TextEditor x:Name="Preview" Grid.Row="1" Visibility="{Binding PreviewText, Converter={StaticResource Gk.NotEmptyToVisibility}}" IsReadOnly="True" ShowLineNumbers="True" FontFamily="{StaticResource Gk.CodeFont}" FontSize="13"
+                                   Background="{DynamicResource Gk.Diff.Background}" Foreground="{DynamicResource Gk.Text}" LineNumbersForeground="{DynamicResource Gk.Text.Faint}"
+                                   HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"/>
+                </Grid>
+            </Grid>
+        </UserControl>
+    </Grid>
+</UserControl>

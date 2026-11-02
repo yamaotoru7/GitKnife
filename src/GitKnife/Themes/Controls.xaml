@@ -1,0 +1,839 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:c="clr-namespace:GitKnife.Controls"
+                    xmlns:local="clr-namespace:GitKnife"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+    <!-- 共通のコントロールスタイル。色は Dark.xaml / Light.xaml の DynamicResource を参照する。 -->
+
+    <!--
+      UI の文字はシステムのメッセージフォント（WPF の既定。日本語の Windows では Yu Gothic UI）。パスの "\" は "¥" で描かれる。
+      Yu Gothic UI の英字は Segoe UI とほぼ同じ幅（12px の "Fetch remotes automatically" で 146 と 148）。
+    -->
+    <x:Static x:Key="Gk.UiFont" Member="SystemFonts.MessageFontFamily"/>
+    <FontFamily x:Key="Gk.CodeFont">Consolas, Yu Gothic UI</FontFamily>
+
+    <!-- ===== ボタン（平らな見た目） ===== -->
+    <Style x:Key="Gk.FlatButton" TargetType="Button">
+        <Setter Property="Foreground" Value="{DynamicResource Gk.Text}"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="4,2"/>
+        <Setter Property="Cursor" Value="Arrow"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="3" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Gk.Button.Hover}"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Gk.Button.Pressed}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.4"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ダイアログやパネルの普通のボタン（Stage、Commit など） -->
+    <Style x:Key="Gk.Button" TargetType="Button" BasedOn="{StaticResource Gk.FlatButton}">
+        <Setter Property="Background" Value="{DynamicResource Gk.Button.Background}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource Gk.Input.Border}"/>
+        <Setter Property="Padding" Value="10,3"/>
+        <Setter Property="MinHeight" Value="24"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <!-- 枠つき。既定のボタン（IsDefault）は青い枠（ダイアログの Submit） -->
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="3" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsDefault" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Gk.Accent}"/>
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Gk.Button.Hover}"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Gk.Button.Pressed}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.4"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- タイトルバーの最小化・最大化・閉じる -->
+    <Style x:Key="Gk.CaptionButton" TargetType="Button" BasedOn="{StaticResource Gk.FlatButton}">
+        <Setter Property="Width" Value="46"/>
+        <Setter Property="Height" Value="26"/>
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd" Background="Transparent">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Gk.Button.Hover}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style x:Key="Gk.CloseCaptionButton" TargetType="Button" BasedOn="{StaticResource Gk.CaptionButton}">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd" Background="Transparent">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="#C42B1C"/>
+                            <Setter Property="Foreground" Value="White"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ===== メニュー ===== -->
+    <Style TargetType="Menu">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{DynamicResource Gk.Text}"/>
+        <Setter Property="FontSize" Value="12"/>
+    </Style>
+
+    <Style TargetType="Separator" x:Key="{x:Static MenuItem.SeparatorStyleKey}">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Separator">
+                    <Border Height="1" Margin="8,4" Background="{DynamicResource Gk.Border}"/>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="MenuItem">
+        <Setter Property="Foreground" Value="{DynamicResource Gk.Text}"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="MenuItem">
+                    <!-- 左の余白は文字まで約 10px（枠の 4 + 6）。チェックの列は、同じメニューにチェックの付いた項目があるときだけ幅を取る（SharedSizeGroup） -->
+                    <Border x:Name="Bd" Background="Transparent" CornerRadius="3" Padding="6,4,8,4" SnapsToDevicePixels="True">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition x:Name="CheckCol" Width="Auto" SharedSizeGroup="MenuCheck"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition x:Name="GestureCol" Width="Auto"/>
+                                <ColumnDefinition x:Name="ArrowCol" Width="16"/>
+                            </Grid.ColumnDefinitions>
+                            <Path x:Name="Check" Grid.Column="0" Data="{StaticResource Icon.Check}" Stroke="{TemplateBinding Foreground}" StrokeThickness="1.4"
+                                  Width="16" Height="16" Margin="0,0,4,0" Visibility="Collapsed" VerticalAlignment="Center"/>
+                            <ContentPresenter Grid.Column="1" ContentSource="Header" RecognizesAccessKey="True" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="Gesture" Grid.Column="2" Text="{TemplateBinding InputGestureText}" Margin="24,0,0,0" Foreground="{DynamicResource Gk.Text.Dim}" VerticalAlignment="Center"/>
+                            <Path x:Name="Arrow" Grid.Column="3" Data="{StaticResource Icon.ChevronRight}" Stroke="{TemplateBinding Foreground}" StrokeThickness="1.2"
+                                  Width="16" Height="16" Visibility="Collapsed" VerticalAlignment="Center"/>
+                            <Popup x:Name="PART_Popup" Placement="Right" IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}"
+                                   AllowsTransparency="True" Focusable="False" PopupAnimation="None" HorizontalOffset="4" VerticalOffset="-5">
+                                <Border Background="{DynamicResource Gk.Menu.Background}" BorderBrush="{DynamicResource Gk.Border}" BorderThickness="1" CornerRadius="6" Padding="4" MinWidth="180">
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto" Style="{x:Null}">
+                                        <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle" Grid.IsSharedSizeScope="True"/>
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="Role" Value="TopLevelHeader">
+                            <Setter TargetName="Bd" Property="Padding" Value="8,4"/>
+                            <Setter TargetName="CheckCol" Property="Width" Value="0"/>
+                            <Setter TargetName="ArrowCol" Property="Width" Value="0"/>
+                            <Setter TargetName="GestureCol" Property="Width" Value="0"/>
+                            <Setter TargetName="PART_Popup" Property="Placement" Value="Bottom"/>
+                            <Setter TargetName="PART_Popup" Property="HorizontalOffset" Value="0"/>
+                            <Setter TargetName="PART_Popup" Property="VerticalOffset" Value="1"/>
+                        </Trigger>
+                        <Trigger Property="Role" Value="SubmenuHeader">
+                            <Setter TargetName="Arrow" Property="Visibility" Value="Visible"/>
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Check" Property="Visibility" Value="Visible"/>
+                        </Trigger>
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Gk.Menu.Hover}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Foreground" Value="{DynamicResource Gk.Text.Faint}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="ContextMenu">
+        <Setter Property="Foreground" Value="{DynamicResource Gk.Text}"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="HasDropShadow" Value="True"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ContextMenu">
+                    <Border Background="{DynamicResource Gk.Menu.Background}" BorderBrush="{DynamicResource Gk.Border}" BorderThickness="1" CornerRadius="6" Padding="4" MinWidth="180">
+                        <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle" Grid.IsSharedSizeScope="True"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ===== ToolTip ===== -->
+    <Style TargetType="ToolTip">
+        <Setter Property="Foreground" Value="{DynamicResource Gk.Text}"/>
+        <Setter Property="Background" Value="{DynamicResource Gk.Menu.Background}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource Gk.Border}"/>
+        <Setter Property="FontSize" Value="12"/>
+    </Style>
+
+    <!-- ===== スクロールバー（細い） ===== -->
+    <Style x:Key="Gk.ScrollThumb" TargetType="Thumb">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Thumb">
+                    <Border Background="{DynamicResource Gk.Splitter}" CornerRadius="3" Margin="2"/>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <!--
+      スクロールバーのつまみの最小の長さ。WPF の Track はつまみを VerticalScrollBarButtonHeight（横は HorizontalScrollBarButtonWidth）の半分より短くしないので、
+      Track の中だけその値を上書きする（2026-10-27 ユーザーの指摘：行が多いとつまみが小さくなりすぎて掴めない）。
+      最小は 40px。
+    -->
+    <!-- 幅はつまみ 9px + 両側 2px（2026-10-27 ユーザーの指摘：細すぎて掴めず、窓の端ではリサイズになった） -->
+    <Style TargetType="ScrollBar">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Width" Value="13"/>
+        <Setter Property="MinWidth" Value="13"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ScrollBar">
+                    <Track x:Name="PART_Track" IsDirectionReversed="True">
+                        <Track.Resources>
+                            <sys:Double x:Key="{x:Static SystemParameters.VerticalScrollBarButtonHeightKey}">80</sys:Double>
+                        </Track.Resources>
+                        <Track.Thumb>
+                            <Thumb Style="{StaticResource Gk.ScrollThumb}"/>
+                        </Track.Thumb>
+                    </Track>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <Trigger Property="Orientation" Value="Horizontal">
+                <Setter Property="Width" Value="Auto"/>
+                <Setter Property="Height" Value="13"/>
+                <Setter Property="MinHeight" Value="13"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ScrollBar">
+                            <Track x:Name="PART_Track" IsDirectionReversed="False">
+                                <Track.Resources>
+                                    <sys:Double x:Key="{x:Static SystemParameters.HorizontalScrollBarButtonWidthKey}">80</sys:Double>
+                                </Track.Resources>
+                                <Track.Thumb>
+                                    <Thumb Style="{StaticResource Gk.ScrollThumb}"/>
+                                </Track.Thumb>
+                            </Track>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- ===== タブ（Preferences / Repository Settings。文字だけ、選ぶとアクセント色の文字と下線） ===== -->
+    <Style x:Key="Gk.TabControl" TargetType="TabControl">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TabControl">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <Border BorderBrush="{DynamicResource Gk.Border}" BorderThickness="0,0,0,1">
+                            <TabPanel IsItemsHost="True"/>
+                        </Border>
+                        <ContentPresenter x:Name="PART_SelectedContentHost" Grid.Row="1" ContentSource="SelectedContent" Margin="0,12,0,0"/>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style x:Key="Gk.TabItem" TargetType="TabItem">
+        <Setter Property="Foreground" Value="{DynamicResource Gk.Text}"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TabItem">
+                    <Border x:Name="Bd" Background="Transparent" BorderBrush="Transparent" BorderThickness="0,0,0,2" Padding="16,5,16,5">
+                        <ContentPresenter x:Name="Content" ContentSource="Header" TextElement.Foreground="{TemplateBinding Foreground}"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Gk.Accent}"/>
+                            <Setter TargetName="Content" Property="TextElement.Foreground" Value="{DynamicResource Gk.Accent}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ===== File History / Blame の一覧の行（選ぶと青い塗り、行の間に細い線） ===== -->
+    <Style x:Key="Gk.HistoryItem" TargetType="ListViewItem">
+        <Setter Property="Foreground" Value="{DynamicResource Gk.Text}"/>
+        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ListViewItem">
+                    <Border x:Name="Bd" Background="Transparent" BorderBrush="{DynamicResource Gk.Border}" BorderThickness="0,0,0,1" Padding="6,1,6,1">
+                        <ContentPresenter/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Gk.List.Hover}"/>
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Gk.Selection}"/>
+                            <Setter Property="Foreground" Value="White"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- 入力欄の右のフォルダボタン（23×23、入力欄と同じ枠） -->
+    <Style x:Key="Gk.BrowseButton" TargetType="Button" BasedOn="{StaticResource Gk.Button}">
+        <Setter Property="Width" Value="23"/>
+        <Setter Property="Height" Value="23"/>
+        <Setter Property="MinHeight" Value="0"/>
+        <Setter Property="Padding" Value="0"/>
+    </Style>
+
+    <!-- ===== 入力欄（フィルタ、検索） ===== -->
+    <Style x:Key="Gk.TextBox" TargetType="TextBox">
+        <Setter Property="Foreground" Value="{DynamicResource Gk.Text}"/>
+        <Setter Property="Background" Value="{DynamicResource Gk.Input.Background}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource Gk.Input.Border}"/>
+        <Setter Property="CaretBrush" Value="{DynamicResource Gk.Text}"/>
+        <Setter Property="SelectionBrush" Value="{DynamicResource Gk.Selection}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="4,2"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <!-- 左のアイコン（c:TextBoxHint.Icon）と、空のときの薄い説明文（c:TextBoxHint.Placeholder） -->
+                <ControlTemplate TargetType="TextBox">
+                    <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="3">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <c:IconImage x:Name="IconElement" AutomationProperties.AutomationId="IconElement" Width="14" Height="14" Margin="5,0,0,0" VerticalAlignment="Center"
+                                         Geometry="{Binding (c:TextBoxHint.Icon), RelativeSource={RelativeSource TemplatedParent}}" Stroke="{DynamicResource Gk.Text.Dim}"/>
+                            <TextBlock x:Name="PlaceholderText" Grid.Column="1" Padding="2,0,0,0" VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                       Margin="{Binding Padding, RelativeSource={RelativeSource TemplatedParent}, Converter={x:Static local:DoubleThicknessConverter.Instance}}"
+                                       Text="{Binding (c:TextBoxHint.Placeholder), RelativeSource={RelativeSource TemplatedParent}}" Foreground="{DynamicResource Gk.Text.Dim}"
+                                       IsHitTestVisible="False" Visibility="Collapsed"/>
+                            <ScrollViewer x:Name="PART_ContentHost" Grid.Column="1" Margin="{TemplateBinding Padding}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Gk.Accent}"/>
+                        </Trigger>
+                        <!-- 無効は全体を薄く（Repository Settings の名前とメール：地 #303030、枠 #414141、文字は灰色。#2B2B2B の上で 0.6 と同じ） -->
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.6"/>
+                        </Trigger>
+                        <Trigger Property="c:TextBoxHint.Icon" Value="{x:Null}">
+                            <Setter TargetName="IconElement" Property="Visibility" Value="Collapsed"/>
+                        </Trigger>
+                        <Trigger Property="Text" Value="">
+                            <Setter TargetName="PlaceholderText" Property="Visibility" Value="Visible"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ===== リスト ===== -->
+    <Style x:Key="Gk.ListBox" TargetType="ListBox">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Foreground" Value="{DynamicResource Gk.Text}"/>
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
+        <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True"/>
+        <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling"/>
+        <Setter Property="VirtualizingPanel.ScrollUnit" Value="Pixel"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+    </Style>
+
+    <!-- 選択で全面を塗る行（コミット一覧・ファイル一覧） -->
+    <Style x:Key="Gk.SelectionRow" TargetType="ListBoxItem">
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="Margin" Value="0"/>
+        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Foreground" Value="{DynamicResource Gk.Text}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ListBoxItem">
+                    <Border x:Name="Bd" Background="Transparent" SnapsToDevicePixels="True">
+                        <ContentPresenter/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Gk.List.Hover}"/>
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Gk.Selection}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource Gk.Text.OnSelection}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- コミット一覧の行。一覧にフォーカスが無いとき（Ctrl+F の検索欄に入力中など）の選択は灰色（#525252） -->
+    <Style x:Key="Gk.CommitRow" TargetType="ListBoxItem">
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="Margin" Value="0"/>
+        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Foreground" Value="{DynamicResource Gk.Text}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ListBoxItem">
+                    <Border x:Name="Bd" Background="Transparent" SnapsToDevicePixels="True">
+                        <ContentPresenter/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Gk.List.Hover}"/>
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Gk.Selection}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource Gk.Text.OnSelection}"/>
+                        </Trigger>
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsSelected" Value="True"/>
+                                <Condition Property="Selector.IsSelectionActive" Value="False"/>
+                            </MultiTrigger.Conditions>
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Gk.CommitList.Selection.Inactive}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource Gk.Text}"/>
+                        </MultiTrigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- サイドバーの行（角丸の淡い選択） -->
+    <Style x:Key="Gk.SidebarRow" TargetType="ListBoxItem">
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="Margin" Value="4,0"/>
+        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Foreground" Value="{DynamicResource Gk.Text}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ListBoxItem">
+                    <Border x:Name="Bd" Background="Transparent" CornerRadius="4" SnapsToDevicePixels="True">
+                        <ContentPresenter/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Gk.Sidebar.Selected}"/>
+                        </Trigger>
+                        <!-- フォーカスがあるあいだの選択はアクセント色 -->
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsSelected" Value="True"/>
+                                <Condition Property="Selector.IsSelectionActive" Value="True"/>
+                            </MultiTrigger.Conditions>
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Gk.Selection}"/>
+                            <Setter Property="Foreground" Value="White"/>
+                        </MultiTrigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- 枠つきの一覧の行（Workspaces：高さ 24、左右に 5 と 1 の余白、角丸のアクセント色の選択） -->
+    <Style x:Key="Gk.RoundRow" TargetType="ListBoxItem">
+        <Setter Property="Padding" Value="3,0"/>
+        <Setter Property="Margin" Value="5,0,1,0"/>
+        <Setter Property="Height" Value="24"/>
+        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Foreground" Value="{DynamicResource Gk.Text}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ListBoxItem">
+                    <Border x:Name="Bd" Background="Transparent" CornerRadius="4" Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+                        <ContentPresenter VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Gk.Selection}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource Gk.Text.OnSelection}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Local Changes / All Commits の切り替え（サイドバー上部の行） -->
+    <Style x:Key="Gk.SidebarViewRadio" TargetType="RadioButton">
+        <Setter Property="Foreground" Value="{DynamicResource Gk.Text}"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <Border x:Name="Bd" Background="Transparent" CornerRadius="4" Margin="4,0" Height="22">
+                        <ContentPresenter VerticalAlignment="Center" Margin="20,0,0,0"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Gk.List.Hover}"/>
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Gk.Sidebar.Selected}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- アイコンだけのトグル（サイドバーのタブ、diff ツールバー） -->
+    <Style x:Key="Gk.IconRadio" TargetType="RadioButton">
+        <Setter Property="Foreground" Value="{DynamicResource Gk.Text.Dim}"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <!-- 大きさ 40×24、ホバーは角の丸い暗い四角（アイコンの色は変えない。2026-10-27 ユーザーの指摘） -->
+        <Setter Property="Width" Value="40"/>
+        <Setter Property="Height" Value="24"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <Border x:Name="Bd" Background="Transparent" CornerRadius="4">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Gk.IconRadio.Hover}"/>
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter Property="Foreground" Value="{DynamicResource Gk.Accent}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- 下線のタブ（コミット詳細の Commit / Changes / File Tree） -->
+    <Style x:Key="Gk.UnderlineTab" TargetType="RadioButton">
+        <Setter Property="Foreground" Value="{DynamicResource Gk.Text}"/>
+        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <Grid Background="Transparent" MinWidth="94">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="12,0"/>
+                        <Border x:Name="Line" Height="2" VerticalAlignment="Bottom" Background="Transparent"/>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter Property="Foreground" Value="{DynamicResource Gk.Accent}"/>
+                            <Setter TargetName="Line" Property="Background" Value="{DynamicResource Gk.Accent}"/>
+                        </Trigger>
+                        <!-- 押せないタブは薄く（比べているときと Interactive Rebase の File Tree） -->
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Foreground" Value="{DynamicResource Gk.Text.Faint}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="Gk.SplitterStyle" TargetType="GridSplitter">
+        <Setter Property="Background" Value="{DynamicResource Gk.Splitter}"/>
+        <Setter Property="Focusable" Value="False"/>
+    </Style>
+    <!-- 見出しを出さない GridView（ファイル一覧。行を UIA の DataItem にするために ListView + GridView を使う） -->
+    <Style x:Key="Gk.HiddenColumnHeader" TargetType="GridViewColumnHeader">
+        <Setter Property="Visibility" Value="Collapsed"/>
+    </Style>
+
+    <!-- ===== 見出し行の小さなボタン（ファイル一覧・diff の見出し。16×16、アイコン 12） ===== -->
+    <Style x:Key="Gk.HeaderIconButton" TargetType="Button" BasedOn="{StaticResource Gk.FlatButton}">
+        <Setter Property="Width" Value="16"/>
+        <Setter Property="Height" Value="16"/>
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="Margin" Value="2,0,2,0"/>
+        <Setter Property="Foreground" Value="{DynamicResource Gk.Text.Dim}"/>
+    </Style>
+    <Style x:Key="Gk.HeaderToggle" TargetType="ToggleButton">
+        <Setter Property="Width" Value="16"/>
+        <Setter Property="Height" Value="16"/>
+        <Setter Property="Margin" Value="2,0,2,0"/>
+        <Setter Property="Foreground" Value="{DynamicResource Gk.Text.Dim}"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="Bd" Background="Transparent" CornerRadius="2">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="{DynamicResource Gk.Button.Hover}"/></Trigger>
+                        <Trigger Property="IsChecked" Value="True"><Setter Property="Foreground" Value="{DynamicResource Gk.Accent}"/></Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+
+    <!-- ===== ダイアログの入力（参照の選択ボタン、ComboBox、CheckBox）。暗い入力欄と青いチェック ===== -->
+    <Style x:Key="Gk.PickerButton" TargetType="Button">
+        <Setter Property="Foreground" Value="{DynamicResource Gk.Text}"/>
+        <Setter Property="Background" Value="{DynamicResource Gk.Input.Background}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource Gk.Input.Border}"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="3" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Gk.Text.Dim}"/></Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Gk.Accent}"/></Trigger>
+                        <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5"/></Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- 参照の選択の一覧の行（選んでいる行は灰色の地に左の青い線） -->
+    <Style x:Key="Gk.PickerItem" TargetType="ListBoxItem">
+        <Setter Property="Foreground" Value="{DynamicResource Gk.Text}"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ListBoxItem">
+                    <Grid>
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="3" Padding="4,2">
+                            <ContentPresenter/>
+                        </Border>
+                        <Border x:Name="Bar" Width="3" Height="14" CornerRadius="1.5" HorizontalAlignment="Left" Margin="2,0,0,0" Background="{DynamicResource Gk.Accent}" Visibility="Collapsed"/>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="{DynamicResource Gk.List.Hover}"/></Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Gk.Selection.Inactive}"/>
+                            <Setter TargetName="Bar" Property="Visibility" Value="Visible"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Reset type の行（色の点 + 名前 + 説明） -->
+    <DataTemplate x:Key="Gk.ResetTypeTemplate">
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="18"/>
+                <ColumnDefinition Width="80"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <Ellipse Width="10" Height="10" Fill="{Binding Color}" VerticalAlignment="Center" HorizontalAlignment="Left"/>
+            <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center"/>
+            <TextBlock Grid.Column="2" Text="{Binding Description}" VerticalAlignment="Center"/>
+        </Grid>
+    </DataTemplate>
+
+    <!-- リモートの ComboBox の行（雲のアイコン + 名前） -->
+    <DataTemplate x:Key="Gk.RemoteItemTemplate">
+        <StackPanel Orientation="Horizontal">
+            <Path Style="{StaticResource Gk.IconPath}" Data="{StaticResource Icon.Remote}" Margin="-2,0,6,0" Stroke="{DynamicResource Gk.Text.Dim}"/>
+            <TextBlock Text="{Binding}" VerticalAlignment="Center"/>
+        </StackPanel>
+    </DataTemplate>
+
+    <Style TargetType="ComboBoxItem">
+        <Setter Property="Foreground" Value="{DynamicResource Gk.Text}"/>
+        <Setter Property="Padding" Value="8,3"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ComboBoxItem">
+                    <Border x:Name="Bd" Background="Transparent" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsHighlighted" Value="True"><Setter TargetName="Bd" Property="Background" Value="{DynamicResource Gk.Selection}"/></Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="ComboBox">
+        <Setter Property="Foreground" Value="{DynamicResource Gk.Text}"/>
+        <Setter Property="Background" Value="{DynamicResource Gk.Input.Background}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource Gk.Input.Border}"/>
+        <Setter Property="Height" Value="24"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ComboBox">
+                    <Grid>
+                        <ToggleButton x:Name="Toggle" Focusable="False" IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}" ClickMode="Press">
+                            <ToggleButton.Template>
+                                <ControlTemplate TargetType="ToggleButton">
+                                    <Border x:Name="Bd" Background="{Binding Background, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                                            BorderBrush="{Binding BorderBrush, RelativeSource={RelativeSource AncestorType=ComboBox}}" BorderThickness="1" CornerRadius="3">
+                                        <Path Style="{StaticResource Gk.SmallIcon}" Data="{StaticResource Icon.ChevronDown}" HorizontalAlignment="Right" Margin="0,0,6,0"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Gk.Text.Dim}"/></Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </ToggleButton.Template>
+                        </ToggleButton>
+                        <ContentPresenter Content="{TemplateBinding SelectionBoxItem}" ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                          Margin="8,0,24,0" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                        <Popup IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" AllowsTransparency="True" Focusable="False" PopupAnimation="None">
+                            <Border MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}" MaxHeight="300"
+                                    Background="{DynamicResource Gk.Menu.Background}" BorderBrush="{DynamicResource Gk.Border}" BorderThickness="1" CornerRadius="3">
+                                <ScrollViewer>
+                                    <StackPanel IsItemsHost="True"/>
+                                </ScrollViewer>
+                            </Border>
+                        </Popup>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5"/></Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="CheckBox">
+        <Setter Property="Foreground" Value="{DynamicResource Gk.Text}"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="CheckBox">
+                    <StackPanel Orientation="Horizontal" Background="Transparent">
+                        <Border x:Name="Box" Width="16" Height="16" CornerRadius="3" BorderThickness="1"
+                                BorderBrush="{DynamicResource Gk.Input.Border}" Background="{DynamicResource Gk.Input.Background}" VerticalAlignment="Center">
+                            <Grid>
+                                <Path x:Name="Mark" Data="M3.5,8 L6.5,11 L12.5,4.5" Stroke="{DynamicResource Gk.OnAccent}" StrokeThickness="1.6" Visibility="Collapsed" Margin="-1,-1,0,0"/>
+                                <Path x:Name="Dash" Data="M4,7 L10,7" Stroke="{DynamicResource Gk.OnAccent}" StrokeThickness="1.6" Visibility="Collapsed"/>
+                            </Grid>
+                        </Border>
+                        <ContentPresenter Margin="6,0,0,0" VerticalAlignment="Center" RecognizesAccessKey="True"/>
+                    </StackPanel>
+                    <ControlTemplate.Triggers>
+                        <!-- 付いているときは Gk.Accent の地に暗い印（#61CCFF の地に #2B2B2B の印） -->
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Box" Property="Background" Value="{DynamicResource Gk.Accent}"/>
+                            <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Gk.Accent}"/>
+                            <Setter TargetName="Mark" Property="Visibility" Value="Visible"/>
+                        </Trigger>
+                        <!-- 一部だけ（Report a Bug の Attach screenshot など、子のチェックと連動するもの）は横棒 -->
+                        <Trigger Property="IsChecked" Value="{x:Null}">
+                            <Setter TargetName="Box" Property="Background" Value="{DynamicResource Gk.Accent}"/>
+                            <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Gk.Accent}"/>
+                            <Setter TargetName="Dash" Property="Visibility" Value="Visible"/>
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Gk.Text.Dim}"/></Trigger>
+                        <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5"/></Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--
+      ラジオボタン（Preferences の Sort commits、ダイアログの Local changes）：16px の円。外れは入力欄の地に灰色の輪、
+      選ぶと Gk.Accent の太い輪（約 4.5px）と入力欄の地の中心（約 7px）。
+    -->
+    <Style TargetType="RadioButton">
+        <Setter Property="Foreground" Value="{DynamicResource Gk.Text}"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <StackPanel Orientation="Horizontal" Background="Transparent">
+                        <Grid Width="16" Height="16" VerticalAlignment="Center">
+                            <Ellipse x:Name="Ring" Fill="{DynamicResource Gk.Input.Background}" Stroke="{DynamicResource Gk.Radio.Border}" StrokeThickness="1"/>
+                            <Ellipse x:Name="Dot" Width="7" Height="7" Fill="{DynamicResource Gk.Input.Background}" Visibility="Collapsed"/>
+                        </Grid>
+                        <ContentPresenter Margin="6,0,0,0" VerticalAlignment="Center" RecognizesAccessKey="True"/>
+                    </StackPanel>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Ring" Property="Fill" Value="{DynamicResource Gk.Accent}"/>
+                            <Setter TargetName="Ring" Property="Stroke" Value="{DynamicResource Gk.Accent}"/>
+                            <Setter TargetName="Dot" Property="Visibility" Value="Visible"/>
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Ring" Property="Stroke" Value="{DynamicResource Gk.Text.Dim}"/></Trigger>
+                        <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5"/></Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>

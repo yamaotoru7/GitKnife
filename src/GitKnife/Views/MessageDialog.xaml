@@ -1,0 +1,38 @@
+<Window x:Class="GitKnife.Views.MessageDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        WindowStyle="None" ResizeMode="NoResize" SizeToContent="WidthAndHeight" WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{DynamicResource Gk.Details.Background}" Foreground="{DynamicResource Gk.Text}"
+        FontFamily="{StaticResource Gk.UiFont}" FontSize="12.5" MinWidth="420" MaxWidth="720">
+    <!--
+      確認・エラーの小さなダイアログ（"Discard changes"、"Git Error" など）。
+      ボタンの AutomationId は SubmitButton / CancelButton、右上は PART_CloseButton。
+    -->
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="30" ResizeBorderThickness="0" GlassFrameThickness="0" CornerRadius="0"/>
+    </WindowChrome.WindowChrome>
+    <Border BorderBrush="{DynamicResource Gk.Border}" BorderThickness="1">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="30"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <TextBlock x:Name="TitleText" Margin="14,0,40,0" VerticalAlignment="Center" FontWeight="SemiBold"/>
+            <Button x:Name="PART_CloseButton" AutomationProperties.AutomationId="PART_CloseButton" Style="{StaticResource Gk.CaptionButton}" HorizontalAlignment="Right"
+                    WindowChrome.IsHitTestVisibleInChrome="True" Click="Cancel_Click">
+                <Path Style="{StaticResource Gk.IconPath}" Data="{StaticResource Icon.Close}"/>
+            </Button>
+            <StackPanel Grid.Row="1" Margin="20,10,20,16">
+                <TextBlock x:Name="MessageText" TextWrapping="Wrap" FontSize="13"/>
+                <TextBox x:Name="DetailText" Style="{StaticResource Gk.TextBox}" IsReadOnly="True" TextWrapping="Wrap" FontFamily="{StaticResource Gk.CodeFont}" FontSize="12"
+                         MaxHeight="300" VerticalScrollBarVisibility="Auto" Margin="0,10,0,0" Padding="6" Visibility="Collapsed"
+                         AutomationProperties.AutomationId="MessageEditor"/>
+            </StackPanel>
+            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="20,0,20,16">
+                <Button x:Name="SubmitButton" AutomationProperties.AutomationId="SubmitButton" Style="{StaticResource Gk.Button}" MinWidth="80" IsDefault="True" Click="Submit_Click"/>
+                <Button x:Name="CancelButton" AutomationProperties.AutomationId="CancelButton" Style="{StaticResource Gk.Button}" MinWidth="80" Margin="8,0,0,0" IsCancel="True" Content="Cancel" Click="Cancel_Click"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

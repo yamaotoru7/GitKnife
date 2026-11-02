@@ -1,0 +1,129 @@
+[
+  {
+    "version" : 2
+  },
+  {
+    "name" : "Ask Things",
+    "target" : "revision",
+    "ui" : {
+      "buttons" : [
+        {
+          "action" : {
+            "script" : "echo UI [$1{text}] [$2{ref}] [$3{value}] ${sha:abbr}",
+            "showOutput" : true,
+            "type" : "sh",
+            "waitForExit" : true
+          },
+          "title" : "Run"
+        },
+        {
+          "action" : {
+            "type" : "cancel"
+          },
+          "title" : "Cancel"
+        }
+      ],
+      "controls" : [
+        {
+          "placeholder" : "type here",
+          "text" : "hello",
+          "textBoxType" : "generic",
+          "title" : "Message",
+          "type" : "textBox"
+        },
+        {
+          "dropdownType" : "references",
+          "filter" : "refs/heads",
+          "title" : "Branch",
+          "type" : "dropdown"
+        },
+        {
+          "checkedValue" : "--force",
+          "defaultValue" : true,
+          "title" : "Force",
+          "type" : "checkBox",
+          "uncheckedValue" : ""
+        }
+      ],
+      "description" : "Desc for ${sha:abbr}",
+      "title" : "Ask ${repo:name}"
+    }
+  },
+  {
+    "action" : {
+      "script" : "echo FILE ${file} ${file:name} ${sha:abbr}",
+      "showOutput" : true,
+      "type" : "sh",
+      "waitForExit" : true
+    },
+    "name" : "Echo File",
+    "target" : "file"
+  },
+  {
+    "action" : {
+      "script" : "echo REF ${ref} ${ref:short} ${ref:full} ${sha:abbr}",
+      "showOutput" : true,
+      "type" : "sh",
+      "waitForExit" : true
+    },
+    "name" : "Echo Ref",
+    "refTargets" : [
+      "localbranch",
+      "remotebranch",
+      "tag"
+    ],
+    "target" : "ref"
+  },
+  {
+    "action" : {
+      "script" : "echo LOCALONLY ${ref}",
+      "showOutput" : true,
+      "type" : "sh",
+      "waitForExit" : true
+    },
+    "name" : "Local Only",
+    "refTargets" : [
+      "localbranch"
+    ],
+    "target" : "ref"
+  },
+  {
+    "action" : {
+      "script" : "echo MAC",
+      "showOutput" : true,
+      "type" : "sh",
+      "waitForExit" : true
+    },
+    "name" : "Mac Only",
+    "os" : "macOS",
+    "target" : "repository"
+  },
+  {
+    "action" : {
+      "type" : "url",
+      "url" : "https://example.com/${sha:abbr}"
+    },
+    "name" : "Plain Commit Cmd",
+    "target" : "revision"
+  },
+  {
+    "action" : {
+      "script" : "echo REPO ${repo:name} ${repo:path}",
+      "showOutput" : true,
+      "type" : "sh",
+      "waitForExit" : true
+    },
+    "name" : "Repo Cmd",
+    "target" : "repository"
+  },
+  {
+    "action" : {
+      "script" : "echo SHA ${sha} ${sha:abbr} ${repo:name}",
+      "showOutput" : true,
+      "type" : "sh",
+      "waitForExit" : true
+    },
+    "name" : "Tools/Echo SHA",
+    "target" : "revision"
+  }
+]

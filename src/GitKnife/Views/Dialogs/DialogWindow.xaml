@@ -1,0 +1,135 @@
+<Window x:Class="GitKnife.Views.Dialogs.DialogWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:c="clr-namespace:GitKnife.Controls"
+        WindowStyle="None" ResizeMode="NoResize" SizeToContent="Height" WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{DynamicResource Gk.Details.Background}" Foreground="{DynamicResource Gk.Text}"
+        FontFamily="{StaticResource Gk.UiFont}" FontSize="12.5" Title="{Binding Title}">
+    <!--
+      Git 操作ダイアログの枠。左に 64×64 のアイコン、右に題名とサブタイトル、本文、下にフッター。
+      AutomationId：PART_CloseButton、SubmitButton、CancelButton、BusyIndicator、StatusImage、StatusMessageTextBlock。
+    -->
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="28" ResizeBorderThickness="0" GlassFrameThickness="0" CornerRadius="0"/>
+    </WindowChrome.WindowChrome>
+    <Border BorderBrush="{DynamicResource Gk.Border}" BorderThickness="1">
+        <Grid>
+            <Button AutomationProperties.AutomationId="PART_CloseButton" Style="{StaticResource Gk.CaptionButton}" HorizontalAlignment="Right" VerticalAlignment="Top"
+                    WindowChrome.IsHitTestVisibleInChrome="True" Click="Cancel_Click">
+                <Path Style="{StaticResource Gk.IconPath}" Data="{StaticResource Icon.Close}"/>
+            </Button>
+            <Grid x:Name="Layout" Margin="20,26,20,16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="64"/>
+                    <ColumnDefinition Width="16"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition x:Name="BodyRow" Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!--
+                  アイコンは見出しと本文に重ねる（高さは max(64, 見出し + 本文)）。2 行にまたがらせると WPF が本文の行にも 32 を割り振り、
+                  本文の無い確認ダイアログが 19 高くなる
+                -->
+                <Grid Grid.ColumnSpan="3">
+                    <Grid Width="64" Height="64" HorizontalAlignment="Left" VerticalAlignment="Top" Visibility="{Binding ShowHeader, Converter={StaticResource Gk.BoolToVisibility}}">
+                        <!-- GitKnife のアイコン（自作） -->
+                        <Image Source="{StaticResource Gk.AppIcon}"/>
+                        <!-- 警告の三角（Git Error など。アイコンの右下に重ねる） -->
+                        <Image Source="{StaticResource Gk.WarningImage}" Width="22" Height="20" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-4,-2"
+                               Visibility="{Binding ShowWarningBadge, Converter={StaticResource Gk.BoolToVisibility}}"/>
+                    </Grid>
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Top" Margin="80,0,0,0" Visibility="{Binding ShowHeader, Converter={StaticResource Gk.BoolToVisibility}}">
+                            <!-- 長い題名は折り返す -->
+                            <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                            <TextBlock Text="{Binding Subtitle}" Foreground="{DynamicResource Gk.Text}" Margin="0,3,0,14" TextWrapping="Wrap"/>
+                        </StackPanel>
+                        <ContentPresenter x:Name="Body" Margin="0,-6,0,0"/>
+                    </DockPanel>
+                </Grid>
+
+                <!-- フッター -->
+                <UserControl Grid.Row="1" Grid.ColumnSpan="3" Margin="0,10,0,0" Visibility="{Binding ShowFooter, Converter={StaticResource Gk.BoolToVisibility}}">
+                    <Grid>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <!-- 隠すときも UIA には残す（どのダイアログでも BusyIndicator と StatusImage が offscreen で出る） -->
+                            <ProgressBar AutomationProperties.AutomationId="BusyIndicator" Height="14" IsIndeterminate="{Binding IsBusy}">
+                                <ProgressBar.Style>
+                                    <Style TargetType="ProgressBar" BasedOn="{StaticResource {x:Type ProgressBar}}">
+                                        <Setter Property="Opacity" Value="0"/>
+                                        <Setter Property="Width" Value="0"/>
+                                        <Setter Property="Margin" Value="0"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsBusy}" Value="True">
+                                                <Setter Property="Opacity" Value="1"/>
+                                                <Setter Property="Width" Value="14"/>
+                                                <Setter Property="Margin" Value="0,0,6,0"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </ProgressBar.Style>
+                            </ProgressBar>
+                            <!-- 警告は黄色い三角、成功は緑のチェックの丸。どちらでもないときも UIA には残す（幅 0、透明） -->
+                            <UserControl AutomationProperties.AutomationId="StatusImage" Height="16" VerticalAlignment="Center">
+                                <UserControl.Style>
+                                    <Style TargetType="UserControl">
+                                        <Setter Property="Width" Value="0"/>
+                                        <Setter Property="Opacity" Value="0"/>
+                                        <Setter Property="Margin" Value="0"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding StatusIsWarning}" Value="True">
+                                                <Setter Property="Width" Value="16"/>
+                                                <Setter Property="Opacity" Value="1"/>
+                                                <Setter Property="Margin" Value="0,0,6,0"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding StatusIsSuccess}" Value="True">
+                                                <Setter Property="Width" Value="16"/>
+                                                <Setter Property="Opacity" Value="1"/>
+                                                <Setter Property="Margin" Value="0,0,6,0"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </UserControl.Style>
+                                <Grid>
+                                <Path Data="{StaticResource Icon.Warning}" Stroke="{DynamicResource Gk.Change.Modified}" StrokeThickness="1.4" Width="16" Height="16" Stretch="None"
+                                      Visibility="{Binding StatusIsWarning, Converter={StaticResource Gk.BoolToVisibility}}" StrokeLineJoin="Round"/>
+                                <Grid Width="16" Height="16" Visibility="{Binding StatusIsSuccess, Converter={StaticResource Gk.BoolToVisibility}}">
+                                    <Ellipse Stroke="{DynamicResource Gk.Change.Added}" StrokeThickness="1.3" Width="14" Height="14"/>
+                                    <Path Data="M4.5,8 L7,10.5 L11.5,5.5" Stroke="{DynamicResource Gk.Change.Added}" StrokeThickness="1.4" StrokeLineJoin="Round" StrokeEndLineCap="Round" StrokeStartLineCap="Round"/>
+                                </Grid>
+                                </Grid>
+                            </UserControl>
+                            <TextBlock AutomationProperties.AutomationId="StatusMessageTextBlock" Text="{Binding StatusMessage}" Foreground="{DynamicResource Gk.Text}"
+                                       TextTrimming="CharacterEllipsis" MaxWidth="280" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button AutomationProperties.AutomationId="SubmitButton" Content="{Binding SubmitText}" AutomationProperties.Name="{Binding SubmitText}"
+                                    Style="{StaticResource Gk.Button}" IsDefault="True" IsEnabled="{Binding CanSubmitNow}" Click="Submit_Click"
+                                    Visibility="{Binding ShowSubmit, Converter={StaticResource Gk.BoolToVisibility}, ConverterParameter=hidden}"/>
+                            <Button x:Name="CancelBtn" AutomationProperties.AutomationId="CancelButton" Content="{Binding CancelText}" AutomationProperties.Name="{Binding CancelText}" Style="{StaticResource Gk.Button}" Margin="8,0,0,0" IsCancel="True" Click="Cancel_Click"/>
+                        </StackPanel>
+                    </Grid>
+                </UserControl>
+            </Grid>
+            <!-- 大きさを変えるつまみ（CanResize のときだけ。右下に点の三角） -->
+            <Thumb x:Name="Grip" Width="12" Height="12" Margin="0,0,2,2" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                   Cursor="SizeNWSE" Visibility="Collapsed" DragDelta="Grip_DragDelta">
+                <Thumb.Template>
+                    <ControlTemplate TargetType="Thumb">
+                        <Canvas Background="Transparent">
+                            <Rectangle Canvas.Left="8" Canvas.Top="0" Width="2" Height="2" Fill="{DynamicResource Gk.Text.Dim}"/>
+                            <Rectangle Canvas.Left="4" Canvas.Top="4" Width="2" Height="2" Fill="{DynamicResource Gk.Text.Dim}"/>
+                            <Rectangle Canvas.Left="8" Canvas.Top="4" Width="2" Height="2" Fill="{DynamicResource Gk.Text.Dim}"/>
+                            <Rectangle Canvas.Left="0" Canvas.Top="8" Width="2" Height="2" Fill="{DynamicResource Gk.Text.Dim}"/>
+                            <Rectangle Canvas.Left="4" Canvas.Top="8" Width="2" Height="2" Fill="{DynamicResource Gk.Text.Dim}"/>
+                            <Rectangle Canvas.Left="8" Canvas.Top="8" Width="2" Height="2" Fill="{DynamicResource Gk.Text.Dim}"/>
+                        </Canvas>
+                    </ControlTemplate>
+                </Thumb.Template>
+            </Thumb>
+        </Grid>
+    </Border>
+</Window>

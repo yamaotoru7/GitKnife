@@ -1,0 +1,15 @@
+# Integration with Issue Tracker
+#
+# (note that '\' need to be escaped).
+
+[issuetracker "Sample GitHub Rule"]
+  regex = "#(\\d+)"
+  url = "https://github.com/username/repository/issues/$1"
+
+[issuetracker "Sample Jira Rule"]
+  regex = "PROJ-(\\d+)"
+  url = "https://jira.yourcompany.com/browse/PROJ-$1"
+
+[issuetracker "Sample Jira Multiproject Rule"]
+  regex = "(PRJ1|PRJ2)-(\\d+)"
+  url = "https://jira.yourcompany.com/browse/$1-$2"

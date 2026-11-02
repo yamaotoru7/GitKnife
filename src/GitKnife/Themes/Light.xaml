@@ -1,0 +1,104 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- ライトテーマ。暫定値。 -->
+    <Color x:Key="Gk.AccentColor">#0A6ED1</Color>
+    <SolidColorBrush x:Key="Gk.Accent" Color="#0A6ED1"/>
+    <SolidColorBrush x:Key="Gk.Link" Color="#0A6ED1"/>
+
+    <SolidColorBrush x:Key="Gk.Window.Background" Color="#ECECEC"/>
+    <SolidColorBrush x:Key="Gk.TitleBar.Background" Color="#ECECEC"/>
+    <SolidColorBrush x:Key="Gk.Toolbar.Background" Color="#ECECEC"/>
+    <SolidColorBrush x:Key="Gk.StatusBox.Background" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="Gk.TabBar.Background" Color="#DCDCDC"/>
+    <SolidColorBrush x:Key="Gk.Tab.Active" Color="#F6F6F6"/>
+    <SolidColorBrush x:Key="Gk.Tab.Hover" Color="#E4E4E4"/>
+
+    <SolidColorBrush x:Key="Gk.Sidebar.Background" Color="#F3F3F3"/>
+    <SolidColorBrush x:Key="Gk.Sidebar.Selected" Color="#DADADA"/>
+    <SolidColorBrush x:Key="Gk.Input.Background" Color="#FFFFFF"/>
+    <!-- Custom Commands の右の面 -->
+    <SolidColorBrush x:Key="Gk.Panel.Background" Color="#F6F6F6"/>
+    <SolidColorBrush x:Key="Gk.Input.Border" Color="#C8C8C8"/>
+    <SolidColorBrush x:Key="Gk.Border" Color="#D0D0D0"/>
+    <SolidColorBrush x:Key="Gk.Splitter" Color="#C0C0C0"/>
+
+    <SolidColorBrush x:Key="Gk.List.Background" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="Gk.List.Hover" Color="#F0F0F0"/>
+    <!-- 地 #F3F3F3 より少し暗い -->
+    <SolidColorBrush x:Key="Gk.IconRadio.Hover" Color="#E2E2E2"/>
+    <SolidColorBrush x:Key="Gk.Selection" Color="#2F7FE0"/>
+    <SolidColorBrush x:Key="Gk.Selection.Inactive" Color="#D6D6D6"/>
+    <SolidColorBrush x:Key="Gk.CommitList.Selection.Inactive" Color="#D6D6D6"/>
+    <SolidColorBrush x:Key="Gk.ImageFrame" Color="#D0D0D0"/>
+    <SolidColorBrush x:Key="Gk.Details.Background" Color="#FAFAFA"/>
+    <!-- Repository Manager（Dark の明暗の関係に合わせた値） -->
+    <SolidColorBrush x:Key="Gk.Manager.Tree" Color="#F3F3F3"/>
+    <SolidColorBrush x:Key="Gk.Manager.Background" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="Gk.Manager.Card" Color="#F3F3F3"/>
+    <!-- アイコン付きのダイアログの中だけの色 -->
+    <!-- チェックボックスの印と、ラジオボタンの外れの輪 -->
+    <SolidColorBrush x:Key="Gk.OnAccent" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="Gk.Radio.Border" Color="#8A8A8A"/>
+    <!-- 枠つきの一覧（PreferencesView.FramedList。枠の線は Gk.Input.Border のまま） -->
+    <SolidColorBrush x:Key="Gk.FramedList.Background" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="Gk.FramedList.Footer" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="Gk.FramedList.Button" Color="#FDFDFD"/>
+    <SolidColorBrush x:Key="Gk.FramedList.Icon" Color="#797979"/>
+    <!-- Light のダイアログとボタン（ボタンの枠は #CECECE） -->
+    <!-- Interactive Rebase（Light は推定）：Squash / Fixup の点、squash の線と矢印、動作の欄のホバー、Move Up / Down の矢印、Reword の 72 桁の線 -->
+    <SolidColorBrush x:Key="Gk.Rebase.Squash" Color="#9A9A9A"/>
+    <SolidColorBrush x:Key="Gk.Rebase.Graph" Color="#8A8A8A"/>
+    <SolidColorBrush x:Key="Gk.Rebase.ActionHover" Color="#E8E8E8"/>
+    <SolidColorBrush x:Key="Gk.Rebase.MoveArrow" Color="#1B9192"/>
+    <SolidColorBrush x:Key="Gk.Rebase.Ruler" Color="#D6D6D6"/>
+    <SolidColorBrush x:Key="Gk.Rebase.Popup" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="Gk.Rebase.PopupHover" Color="#E2E2E2"/>
+    <!-- History / Blame の窓の地と一覧 -->
+    <SolidColorBrush x:Key="Gk.ToolWindow.Background" Color="#F3F3F3"/>
+    <SolidColorBrush x:Key="Gk.ToolWindow.List" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="Gk.Dialog.Background" Color="#F3F3F3"/>
+    <SolidColorBrush x:Key="Gk.Dialog.Input.Border" Color="#C8C8C8"/>
+    <SolidColorBrush x:Key="Gk.Dialog.Input.Background" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="Gk.Header.Background" Color="#F0F0F0"/>
+    <SolidColorBrush x:Key="Gk.Button.Background" Color="#FDFDFD"/>
+    <SolidColorBrush x:Key="Gk.Button.Hover" Color="#F5F5F5"/>
+    <SolidColorBrush x:Key="Gk.Button.Pressed" Color="#EBEBEB"/>
+    <SolidColorBrush x:Key="Gk.Menu.Background" Color="#FAFAFA"/>
+    <SolidColorBrush x:Key="Gk.Menu.Hover" Color="#E2E2E2"/>
+
+    <SolidColorBrush x:Key="Gk.Text" Color="#1E1E1E"/>
+    <SolidColorBrush x:Key="Gk.Text.Strong" Color="#000000"/>
+    <!-- アイコンの線（サイドバー、ツールバー。文字より少し薄い） -->
+    <SolidColorBrush x:Key="Gk.Icon" Color="#7B7A7A"/>
+    <SolidColorBrush x:Key="Gk.Text.Dim" Color="#6A6A6A"/>
+    <SolidColorBrush x:Key="Gk.Text.Faint" Color="#A0A0A0"/>
+    <SolidColorBrush x:Key="Gk.Text.OnSelection" Color="#FFFFFF"/>
+
+    <SolidColorBrush x:Key="Gk.Diff.Background" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="Gk.Diff.Added" Color="#DDF5E0"/>
+    <SolidColorBrush x:Key="Gk.Diff.AddedInline" Color="#A6E3AE"/>
+    <SolidColorBrush x:Key="Gk.Diff.Removed" Color="#FADCDC"/>
+    <SolidColorBrush x:Key="Gk.Diff.RemovedInline" Color="#F2A8A8"/>
+    <SolidColorBrush x:Key="Gk.Diff.Hunk" Color="#8A8A8A"/>
+    <SolidColorBrush x:Key="Gk.Merge.Theirs" Color="#5A5578"/>
+    <SolidColorBrush x:Key="Gk.Merge.Ours" Color="#2C5466"/>
+    <SolidColorBrush x:Key="Gk.Merge.Unresolved" Color="#A23F3F"/>
+    <SolidColorBrush x:Key="Gk.Diff.Filler" Color="#EEEEEE"/>
+    <SolidColorBrush x:Key="Gk.Diff.SelectionBorder" Color="#2F6FD8"/>
+    <SolidColorBrush x:Key="Gk.Diff.SelectionFill" Color="#1A2F6FD8"/>
+    <SolidColorBrush x:Key="Gk.Diff.TextSelection" Color="#552F6FD8"/>
+
+    <SolidColorBrush x:Key="Gk.Label.Tag" Color="#F6F5FE"/>
+    <SolidColorBrush x:Key="Gk.Label.Stash" Color="#F7F7F7"/>
+    <SolidColorBrush x:Key="Gk.Label.TagBorder" Color="#B5B1F6"/>
+    <SolidColorBrush x:Key="Gk.Label.StashBorder" Color="#C2C2C2"/>
+    <SolidColorBrush x:Key="Gk.Label.Text" Color="#202020"/>
+    <SolidColorBrush x:Key="Gk.Label.Border" Color="#9A9A9A"/>
+
+    <!-- 変化の色（追加 #28CD41、変更 #FFCC00 は Dark と Light で同じ。削除と名前変更は同じ系統の色） -->
+    <SolidColorBrush x:Key="Gk.Change.Added" Color="#28CD41"/>
+    <SolidColorBrush x:Key="Gk.Change.Modified" Color="#FFCC00"/>
+    <SolidColorBrush x:Key="Gk.Change.Deleted" Color="#FF3B30"/>
+    <SolidColorBrush x:Key="Gk.Change.Renamed" Color="#007AFF"/>
+    <SolidColorBrush x:Key="Gk.Change.Conflicted" Color="#E0561F"/>
+</ResourceDictionary>

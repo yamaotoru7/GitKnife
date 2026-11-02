@@ -1,0 +1,262 @@
+<UserControl x:Class="GitKnife.Views.LocalChangesView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:GitKnife.Controls"
+             xmlns:vm="clr-namespace:GitKnife.ViewModels"
+             xmlns:v="clr-namespace:GitKnife.Views"
+             AutomationProperties.AutomationId="CommitUserControl"
+             DataContext="{Binding LocalChanges}"
+             Background="{DynamicResource Gk.List.Background}">
+    <!--
+      Local Changes。
+      左：Unstaged / Staged の 2 リスト（ListView + GridView なので行は UIA の DataItem になる）、右：diff とコミット欄。
+    -->
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="382" MinWidth="200"/>
+            <ColumnDefinition Width="1"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- ===== 左：StageFileUserControl ===== -->
+        <UserControl AutomationProperties.AutomationId="StageFileUserControl" Background="{DynamicResource Gk.List.Background}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="18"/>
+                    <RowDefinition Height="32"/>
+                    <RowDefinition Height="*" MinHeight="40"/>
+                    <RowDefinition Height="34"/>
+                    <RowDefinition Height="*" MinHeight="40"/>
+                </Grid.RowDefinitions>
+
+                <!-- 上端の行 -->
+                <Border Background="{DynamicResource Gk.Header.Background}">
+                    <Grid>
+                        <Button x:Name="SearchButton" Style="{StaticResource Gk.HeaderIconButton}" HorizontalAlignment="Left" ToolTip="Filter" Click="SearchButton_Click">
+                            <Path Style="{StaticResource Gk.SmallIcon}" Data="{StaticResource Icon.Search}"/>
+                        </Button>
+                        <Grid x:Name="FilterPanel" Margin="20,0,70,0" Visibility="Collapsed">
+                            <TextBox x:Name="FilterTextBox" AutomationProperties.AutomationId="FilterTextBox" Style="{StaticResource Gk.TextBox}" Padding="2,0,16,0"
+                                     FontSize="11" Text="{Binding FileFilter, UpdateSourceTrigger=PropertyChanged}" PreviewKeyDown="FilterTextBox_PreviewKeyDown"/>
+                            <!-- × で閉じる（Esc と同じ。絞り込みも消える） -->
+                            <Button AutomationProperties.AutomationId="PART_ClearButton" Style="{StaticResource Gk.HeaderIconButton}" HorizontalAlignment="Right" Width="16" Height="16"
+                                    ToolTip="Close" Click="FilterClose_Click">
+                                <Path Style="{StaticResource Gk.IconPath}" Data="{StaticResource Icon.Close}" Width="8" Height="8"/>
+                            </Button>
+                        </Grid>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,2,0">
+                            <!-- 押せないとき（変更が無い）はアイコンを出さない -->
+                            <Button AutomationProperties.AutomationId="StageAllButton" ToolTip="Stage All" Command="{Binding StageAllCommand}">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource Gk.HeaderIconButton}">
+                                        <Style.Triggers>
+                                            <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0"/></Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                                <c:IconImage AutomationProperties.AutomationId="StageAllButtonIcon" Geometry="{StaticResource Icon.StageAll}" Stroke="{DynamicResource Gk.Text.Dim}"/>
+                            </Button>
+                            <Button AutomationProperties.AutomationId="ShowDiffPopupButton" Style="{StaticResource Gk.HeaderIconButton}" ToolTip="Show Diff in Popup">
+                                <Path Style="{StaticResource Gk.SmallIcon}" Data="{StaticResource Icon.Eye}"/>
+                            </Button>
+                            <Button AutomationProperties.AutomationId="FileListSettingsDropdownButton" Style="{StaticResource Gk.HeaderIconButton}" ToolTip="File list settings" Click="FileListSettings_Click">
+                                <Path Style="{StaticResource Gk.SmallIcon}" Data="{StaticResource Icon.ListSettings}"/>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Unstaged -->
+                <Border Grid.Row="1" Background="{DynamicResource Gk.Header.Background}" BorderBrush="{DynamicResource Gk.Splitter}" BorderThickness="0,0,0,1">
+                    <Grid Margin="6,0,4,0">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="Unstaged" FontWeight="SemiBold" FontSize="13.5"/>
+                            <TextBlock AutomationProperties.AutomationId="UnstagedStatusTextBlock" Margin="6,1,0,0" Foreground="{DynamicResource Gk.Text.Dim}" FontSize="11"/>
+                        </StackPanel>
+                        <Button AutomationProperties.AutomationId="StageButton" Content="Stage" Style="{StaticResource Gk.Button}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                Command="{Binding StageSelectedCommand}" IsEnabled="{Binding HasUnstagedSelection}"/>
+                    </Grid>
+                </Border>
+                <UserControl Grid.Row="2" AutomationProperties.AutomationId="UnstagedFilesFileListUserControl">
+                    <ListView x:Name="UnstagedList" Style="{StaticResource Gk.FileListView}" ItemsSource="{Binding UnstagedRows}"
+                              SelectionChanged="List_SelectionChanged" MouseDoubleClick="List_MouseDoubleClick" SizeChanged="List_SizeChanged" ContextMenuOpening="List_ContextMenuOpening"
+                              KeyDown="List_KeyDown" PreviewMouseLeftButtonDown="List_PreviewMouseLeftButtonDown" PreviewMouseMove="List_PreviewMouseMove"
+                              AllowDrop="True" DragOver="List_DragOver" Drop="List_Drop">
+                        <ListView.View>
+                            <GridView ColumnHeaderContainerStyle="{StaticResource Gk.HiddenColumnHeader}">
+                                <GridViewColumn CellTemplate="{StaticResource Gk.FileRowTemplate}"/>
+                            </GridView>
+                        </ListView.View>
+                        <ListView.ContextMenu>
+                            <!-- 中身は開くときに作る（LocalChangesMenus） -->
+                            <ContextMenu/>
+                        </ListView.ContextMenu>
+                    </ListView>
+                </UserControl>
+
+                <!-- Staged（境界は StageSplitter でドラッグできる） -->
+                <Border Grid.Row="3" Background="{DynamicResource Gk.Header.Background}" BorderBrush="{DynamicResource Gk.Splitter}" BorderThickness="0,1,0,1">
+                    <Grid Margin="10,0,4,0">
+                        <TextBlock Text="Staged" FontWeight="SemiBold" FontSize="13.5" VerticalAlignment="Center"/>
+                        <Button AutomationProperties.AutomationId="UnstageButton" Content="Unstage" Style="{StaticResource Gk.Button}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                Command="{Binding UnstageSelectedCommand}" IsEnabled="{Binding CanUnstage}"/>
+                    </Grid>
+                </Border>
+                <GridSplitter Grid.Row="3" AutomationProperties.AutomationId="StageSplitter" Height="34" HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                              Margin="70,0,90,0" Background="Transparent" ResizeBehavior="PreviousAndNext" ResizeDirection="Rows"/>
+                <UserControl Grid.Row="4" AutomationProperties.AutomationId="StagedFilesFileListUserControl">
+                    <ListView x:Name="StagedList" Style="{StaticResource Gk.FileListView}" ItemsSource="{Binding StagedRows}"
+                              SelectionChanged="List_SelectionChanged" MouseDoubleClick="List_MouseDoubleClick" SizeChanged="List_SizeChanged" ContextMenuOpening="List_ContextMenuOpening"
+                              KeyDown="List_KeyDown" PreviewMouseLeftButtonDown="List_PreviewMouseLeftButtonDown" PreviewMouseMove="List_PreviewMouseMove"
+                              AllowDrop="True" DragOver="List_DragOver" Drop="List_Drop">
+                        <ListView.View>
+                            <GridView ColumnHeaderContainerStyle="{StaticResource Gk.HiddenColumnHeader}">
+                                <GridViewColumn CellTemplate="{StaticResource Gk.FileRowTemplate}"/>
+                            </GridView>
+                        </ListView.View>
+                        <ListView.ContextMenu>
+                            <!-- 中身は開くときに作る（LocalChangesMenus） -->
+                            <ContextMenu/>
+                        </ListView.ContextMenu>
+                    </ListView>
+                </UserControl>
+            </Grid>
+        </UserControl>
+
+        <GridSplitter Grid.Column="1" AutomationProperties.AutomationId="gridSplitter" Style="{StaticResource Gk.SplitterStyle}" Width="1" HorizontalAlignment="Stretch" ResizeBehavior="PreviousAndNext"/>
+
+        <!-- ===== 右：diff とコミット欄 ===== -->
+        <Grid Grid.Column="2" Background="{DynamicResource Gk.Diff.Background}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="18"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <v:FileDiffPanel x:Name="DiffPanel" Grid.Row="0" Grid.RowSpan="2" Place="LocalChanges" Diff="{Binding Diff}" Title="{Binding DiffTitle}" IsStaged="{Binding DiffIsStaged}"
+                             StageRequested="DiffView_StageRequested" UnstageRequested="DiffView_UnstageRequested" DiscardRequested="DiffView_DiscardRequested"
+                             OptionsChanged="DiffPanel_OptionsChanged">
+                <!-- ファイルを選んでいない（diff も競合の案内も無い）ときは何も出さない -->
+                <v:FileDiffPanel.Style>
+                    <Style TargetType="v:FileDiffPanel">
+                        <Style.Triggers>
+                            <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding Diff}" Value="{x:Null}"/>
+                                    <Condition Binding="{Binding Conflict}" Value="{x:Null}"/>
+                                </MultiDataTrigger.Conditions>
+                                <Setter Property="Visibility" Value="Hidden"/>
+                            </MultiDataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </v:FileDiffPanel.Style>
+            </v:FileDiffPanel>
+
+            <!-- 競合中のファイルを選んだとき：diff の代わりに競合の案内 -->
+            <Border Grid.Row="1" Background="{DynamicResource Gk.Diff.Background}" Visibility="{Binding Conflict, Converter={StaticResource Gk.NotEmptyToVisibility}}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" DataContext="{Binding Conflict}">
+                    <Grid>
+                    <!-- 印が無くなったとき（外部ツールや手で直した） -->
+                    <StackPanel Margin="30,60,30,20" HorizontalAlignment="Center" Visibility="{Binding IsResolved, Converter={StaticResource Gk.BoolToVisibility}}">
+                        <c:IconImage Geometry="{StaticResource Icon.Check}" Stroke="{DynamicResource Gk.Change.Added}" Width="32" Height="32" HorizontalAlignment="Center"/>
+                        <TextBlock Text="File conflicts are resolved." FontSize="15" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,8,0,0"/>
+                        <TextBlock AutomationProperties.AutomationId="ConflictResolvedSubtitle" Text="You can stage the file now." HorizontalAlignment="Center" Margin="0,4,0,14"/>
+                        <Button AutomationProperties.AutomationId="StageButton" Content="Stage" Style="{StaticResource Gk.Button}" HorizontalAlignment="Center" Click="StageResolved_Click"/>
+                    </StackPanel>
+                    <StackPanel Margin="30,24,30,20" Visibility="{Binding IsUnresolved, Converter={StaticResource Gk.BoolToVisibility}}">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                            <c:IconImage Geometry="{StaticResource Icon.Warning}" Stroke="{DynamicResource Gk.Change.Modified}" Width="18" Height="18" Margin="0,0,8,0"/>
+                            <TextBlock Text="Merge conflict" FontSize="15" FontWeight="SemiBold"/>
+                        </StackPanel>
+                        <TextBlock Text="Select the changes or merge them manually" HorizontalAlignment="Center" Margin="0,4,0,14"/>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,16">
+                            <c:IconImage AutomationProperties.AutomationId="FileIcon" Geometry="{StaticResource Icon.File}" Width="16" Height="16" Margin="0,0,6,0"/>
+                            <TextBlock AutomationProperties.AutomationId="FileNameTextBlock" Text="{Binding Path}" FontSize="13.5"/>
+                        </StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <ContentControl Content="{Binding}" ContentTemplate="{StaticResource Gk.ConflictCardTheirs}"/>
+                            <CheckBox Grid.Column="1" AutomationProperties.AutomationId="RemoteCheckBox" IsChecked="{Binding UseTheirs}" VerticalAlignment="Top" Margin="10,18,0,0"/>
+                            <Border Grid.Column="2" Width="90" Height="1" Background="{DynamicResource Gk.Accent}" VerticalAlignment="Top" Margin="6,26,6,0"/>
+                            <CheckBox Grid.Column="3" AutomationProperties.AutomationId="LocalCheckBox" IsChecked="{Binding UseOurs}" VerticalAlignment="Top" Margin="0,18,10,0"/>
+                            <ContentControl Grid.Column="4" Content="{Binding}" ContentTemplate="{StaticResource Gk.ConflictCardOurs}"/>
+                        </Grid>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,18,0,0">
+                            <Button AutomationProperties.AutomationId="ResolveButton" Content="{Binding ResolveText}" AutomationProperties.Name="{Binding ResolveText}" Style="{StaticResource Gk.Button}"
+                                    Click="Resolve_Click"/>
+                            <!-- 外部のマージツール（最初に見つかったもの。"Merge in Visual Studio" など） -->
+                            <Button x:Name="ExternalMergeButton" AutomationProperties.AutomationId="ResolveInExternalMergerButton" Style="{StaticResource Gk.Button}" Margin="8,0,0,0"
+                                    Click="ExternalMerge_Click" Loaded="ExternalMergeButton_Loaded"/>
+                        </StackPanel>
+                    </StackPanel>
+                    </Grid>
+                </ScrollViewer>
+            </Border>
+
+            <!-- コミット欄 -->
+            <Border Grid.Row="2" BorderBrush="{DynamicResource Gk.Splitter}" BorderThickness="0,1,0,0" Background="{DynamicResource Gk.List.Background}" Padding="14,14,14,12">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <Border BorderBrush="{DynamicResource Gk.Input.Border}" BorderThickness="1" CornerRadius="3" Background="{DynamicResource Gk.Input.Background}">
+                        <StackPanel>
+                            <Grid>
+                                <TextBox x:Name="SubjectBox" AutomationProperties.AutomationId="CommitSubjectTextBox" Text="{Binding Subject, UpdateSourceTrigger=PropertyChanged}"
+                                         Background="Transparent" BorderThickness="0" Foreground="{DynamicResource Gk.Text}" CaretBrush="{DynamicResource Gk.Text}" Padding="4,4,50,3" FontSize="13"/>
+                                <TextBlock Text="Commit subject" IsHitTestVisible="False" Foreground="{DynamicResource Gk.Text.Faint}" Margin="7,4,0,0" FontSize="13"
+                                           Visibility="{Binding Subject, Converter={StaticResource Gk.EmptyToVisibility}}"/>
+                                <TextBlock AutomationProperties.AutomationId="SubjectLengthLimitTextBlock" Text="{Binding SubjectLengthText}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                           Margin="0,0,26,0" FontSize="11">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{DynamicResource Gk.Text.Dim}"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding SubjectLengthLevel}" Value="1"><Setter Property="Foreground" Value="{DynamicResource Gk.Change.Modified}"/></DataTrigger>
+                                                <DataTrigger Binding="{Binding SubjectLengthLevel}" Value="2"><Setter Property="Foreground" Value="{DynamicResource Gk.Change.Deleted}"/></DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <Button x:Name="RecentButton" AutomationProperties.AutomationId="RecentCommitMessagesDropDownButton" Style="{StaticResource Gk.HeaderIconButton}" Width="18" Height="18"
+                                        HorizontalAlignment="Right" Margin="0,0,4,0" Click="RecentMessages_Click">
+                                    <Path Style="{StaticResource Gk.SmallIcon}" Data="{StaticResource Icon.Message}"/>
+                                </Button>
+                            </Grid>
+                            <Border Height="1" Background="{DynamicResource Gk.Input.Border}"/>
+                            <Grid>
+                                <TextBox x:Name="DescriptionBox" AutomationProperties.AutomationId="CommitDescriptionTextBox" Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" TextWrapping="Wrap"
+                                         MinHeight="22" MaxHeight="200" VerticalScrollBarVisibility="Auto"
+                                         Background="Transparent" BorderThickness="0" Foreground="{DynamicResource Gk.Text}" CaretBrush="{DynamicResource Gk.Text}" Padding="4,3"/>
+                                <TextBlock Text="Description" IsHitTestVisible="False" Foreground="{DynamicResource Gk.Text.Faint}" Margin="7,3,0,0"
+                                           Visibility="{Binding Description, Converter={StaticResource Gk.EmptyToVisibility}}"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                    <TextBlock Grid.Row="1" AutomationProperties.AutomationId="WarningTextBlock" Text="{Binding Warning}" Foreground="{DynamicResource Gk.Change.Modified}" Margin="0,4,0,0"
+                               Visibility="{Binding Warning, Converter={StaticResource Gk.NotEmptyToVisibility}}"/>
+                    <Grid Grid.Row="2" Margin="0,12,0,0">
+                        <CheckBox AutomationProperties.AutomationId="CheckBoxAmend" Content="Amend" IsChecked="{Binding Amend}" Foreground="{DynamicResource Gk.Text}" VerticalAlignment="Center"/>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button AutomationProperties.AutomationId="CommitButton" Content="{Binding CommitButtonText}" Style="{StaticResource Gk.Button}" Command="{Binding CommitCommand}"
+                                    IsEnabled="{Binding CanCommit}" AutomationProperties.Name="{Binding CommitButtonText}"/>
+                            <Button x:Name="CommitDropdown" AutomationProperties.AutomationId="CommitDropdownButton" Style="{StaticResource Gk.Button}" Padding="3,0" Margin="1,0,0,0"
+                                    IsEnabled="{Binding CanCommit}" Click="CommitDropdown_Click">
+                                <Path Style="{StaticResource Gk.SmallIcon}" Data="{StaticResource Icon.ChevronDown}" Width="9" Height="9"/>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

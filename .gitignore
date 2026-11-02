@@ -1,0 +1,19 @@
+# 作業用の採取物・サンドボックス（Git 管理外）
+.work/
+
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+TestResults/
+
+# Serena のキャッシュ
+.serena/cache/
+
+# 同梱する git（tools/git/fetch-portable-git.ps1 が用意する）
+vendor/
+
+# トークンなどの秘密（コミットしない）
+.env

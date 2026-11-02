@@ -1,0 +1,32 @@
+<Project>
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <Version>0.1.9</Version>
+    <Product>GitKnife</Product>
+    <Authors>toru</Authors>
+    <Copyright>Copyright © 2026 toru</Copyright>
+    <NeutralLanguage>en</NeutralLanguage>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <!--
+    更新の確認とバグ報告の送り先（配布先ごとに変わる）。
+    Distribution.props があればその値を使う。無いとき、または -p:GkDistribution=github のときは GitHub のリリースと Issue。
+    GkServer：Web の URL。GkRepository："owner/repo"。GkOAuthClientId：更新の API にサインインが要るサーバーの OAuth2 アプリ（空ならサインインしない）。
+    GkBugReportAssignee：バグ報告の Issue の担当（空なら出さない）。
+  -->
+  <Import Project="$(MSBuildThisFileDirectory)Distribution.props" Condition="'$(GkDistribution)' != 'github' and Exists('$(MSBuildThisFileDirectory)Distribution.props')" />
+  <PropertyGroup>
+    <GkServer Condition="'$(GkServer)' == ''">https://github.com/</GkServer>
+    <GkRepository Condition="'$(GkRepository)' == ''">yamaotoru7/GitKnife</GkRepository>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'GitKnife.Core'">
+    <AssemblyMetadata Include="GkServer" Value="$(GkServer)" />
+    <AssemblyMetadata Include="GkRepository" Value="$(GkRepository)" />
+    <AssemblyMetadata Include="GkOAuthClientId" Value="$(GkOAuthClientId)" />
+    <AssemblyMetadata Include="GkBugReportAssignee" Value="$(GkBugReportAssignee)" />
+  </ItemGroup>
+</Project>

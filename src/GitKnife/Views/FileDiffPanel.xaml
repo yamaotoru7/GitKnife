@@ -1,0 +1,62 @@
+<UserControl x:Class="GitKnife.Views.FileDiffPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:GitKnife.Controls"
+             x:Name="Root">
+    <!--
+      1 ファイルの diff：見出しと本体（DiffViewer）。Local Changes とコミット詳細の Changes で使う。
+      見出しのボタンは設定（DiffContextSize、DiffShowEntireFile、*DiffLayoutMode）を変えて OptionsChanged を出す。読み直しは持ち主が行う。
+    -->
+    <Grid Background="{DynamicResource Gk.Diff.Background}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="18"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Border Background="{DynamicResource Gk.Header.Background}" AutomationProperties.AutomationId="FileControlHeaderUserControl">
+            <Grid>
+                <StackPanel x:Name="NavButtons" Orientation="Horizontal" HorizontalAlignment="Left" Margin="2,0,0,0">
+                    <Button AutomationProperties.AutomationId="PreviousButton" Style="{StaticResource Gk.HeaderIconButton}" ToolTip="Previous change (Ctrl+Up)" Click="Previous_Click">
+                        <Path Style="{StaticResource Gk.SmallIcon}" Data="{StaticResource Icon.ChevronUp}"/>
+                    </Button>
+                    <Button AutomationProperties.AutomationId="NextButton" Style="{StaticResource Gk.HeaderIconButton}" ToolTip="Next change (Ctrl+Down)" Click="Next_Click">
+                        <Path Style="{StaticResource Gk.SmallIcon}" Data="{StaticResource Icon.ChevronDown}"/>
+                    </Button>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <c:IconImage x:Name="FileTypeImage" AutomationProperties.AutomationId="FileTypeImage" Geometry="{StaticResource Icon.File}" Margin="0,0,4,0"/>
+                    <TextBlock x:Name="FilePathTextBlock" AutomationProperties.AutomationId="FilePathTextBlock" FontSize="11.5" VerticalAlignment="Center"/>
+                </StackPanel>
+                <StackPanel x:Name="OptionButtons" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,2,0">
+                    <ToggleButton x:Name="IgnoreWhitespaceToggle" AutomationProperties.AutomationId="IgnoreWhitespacesToggleButton" Style="{StaticResource Gk.HeaderToggle}" ToolTip="Ignore whitespace" Click="IgnoreWhitespace_Click">
+                        <Path Style="{StaticResource Gk.SmallIcon}" Data="{StaticResource Icon.Whitespace}"/>
+                    </ToggleButton>
+                    <ToggleButton AutomationProperties.AutomationId="ShowHiddenSymbolsToggleButton" Style="{StaticResource Gk.HeaderToggle}" ToolTip="Show hidden symbols" Click="HiddenSymbols_Click">
+                        <Path Style="{StaticResource Gk.SmallIcon}" Data="{StaticResource Icon.Pilcrow}"/>
+                    </ToggleButton>
+                    <ToggleButton x:Name="WordWrapToggle" AutomationProperties.AutomationId="WordWrapToggleButton" Style="{StaticResource Gk.HeaderToggle}" ToolTip="Word wrap" Click="WordWrap_Click">
+                        <Path Style="{StaticResource Gk.SmallIcon}" Data="{StaticResource Icon.WordWrap}"/>
+                    </ToggleButton>
+                    <Button AutomationProperties.AutomationId="DecreaseNumberOfVisibleLinesButton" Style="{StaticResource Gk.HeaderIconButton}" ToolTip="Decrease number of visible lines" Click="FewerLines_Click">
+                        <Path Style="{StaticResource Gk.SmallIcon}" Data="{StaticResource Icon.LinesLess}"/>
+                    </Button>
+                    <Button AutomationProperties.AutomationId="IncreaseNumberOfVisibleLinesButton" Style="{StaticResource Gk.HeaderIconButton}" ToolTip="Increase number of visible lines" Click="MoreLines_Click">
+                        <Path Style="{StaticResource Gk.SmallIcon}" Data="{StaticResource Icon.LinesMore}"/>
+                    </Button>
+                    <ToggleButton x:Name="EntireFileToggle" AutomationProperties.AutomationId="ShowEntireFileToggleButton" Style="{StaticResource Gk.HeaderToggle}" ToolTip="Show entire file" Click="EntireFile_Click">
+                        <Path Style="{StaticResource Gk.SmallIcon}" Data="{StaticResource Icon.EntireFile}"/>
+                    </ToggleButton>
+                    <ToggleButton x:Name="LayoutToggle" AutomationProperties.AutomationId="DiffLayoutModeToggleButton" Style="{StaticResource Gk.HeaderToggle}" ToolTip="Side by side" Click="Layout_Click">
+                        <Path Style="{StaticResource Gk.SmallIcon}" Data="{StaticResource Icon.SideBySide}"/>
+                    </ToggleButton>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <c:DiffViewer x:Name="DiffView" Grid.Row="1"/>
+        <!-- 画像のときは diff の代わりに -->
+        <c:ImageDiffView x:Name="ImageView" Grid.Row="1" Visibility="Collapsed" Background="{DynamicResource Gk.Details.Background}"/>
+        <!-- submodule のときは "Submodule 'sublib' changed" -->
+        <c:SubmoduleDiffView x:Name="SubmoduleView" Grid.Row="1" Visibility="Collapsed" Background="{DynamicResource Gk.Details.Background}"/>
+    </Grid>
+</UserControl>

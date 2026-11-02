@@ -1,0 +1,56 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>GitKnife</AssemblyName>
+    <RootNamespace>GitKnife</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- 自作のアイコン（tools/icon/make-icon.py で生成） -->
+    <ApplicationIcon>Assets/GitKnife.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- diff／マージのコードエディタ -->
+    <PackageReference Include="AvalonEdit" Version="6.3.1.120" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageReference Include="Markdig" Version="1.5.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets/GitKnife.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\GitKnife.Core\GitKnife.Core.csproj" />
+    <!-- Interactive Rebase のエディタ役。GitKnife.exe と同じフォルダに GitKnife.RI.exe を置く -->
+    <ProjectReference Include="..\GitKnife.RI\GitKnife.RI.csproj" />
+  </ItemGroup>
+
+  <!--
+    同梱の git（T1201、D002）。tools/git/fetch-portable-git.ps1 が用意した vendor/portable-git を出力の git\ に写す
+    （GitExecutable.Resolve が最初に探す場所）。9000 個を超えるので、版の印（.gitknife-bundle）が出力と同じなら写さない。
+    vendor が無ければ何もしない（PATH の git を使う）。
+  -->
+  <PropertyGroup>
+    <BundledGitDir>$(MSBuildThisFileDirectory)..\..\vendor\portable-git\</BundledGitDir>
+    <BundledGitStamp>$(BundledGitDir).gitknife-bundle</BundledGitStamp>
+    <OutputGitStamp>$(OutDir)git\.gitknife-bundle</OutputGitStamp>
+  </PropertyGroup>
+  <Target Name="BundleGit" AfterTargets="Build" Condition="Exists('$(BundledGitStamp)')">
+    <PropertyGroup>
+      <_SourceGitStamp>$([System.IO.File]::ReadAllText('$(BundledGitStamp)').Trim())</_SourceGitStamp>
+      <_OutputGitStamp Condition="Exists('$(OutputGitStamp)')">$([System.IO.File]::ReadAllText('$(OutputGitStamp)').Trim())</_OutputGitStamp>
+    </PropertyGroup>
+    <ItemGroup Condition="'$(_SourceGitStamp)' != '$(_OutputGitStamp)'">
+      <_BundledGitFile Include="$(BundledGitDir)**\*" />
+    </ItemGroup>
+    <Message Importance="high" Text="Copying bundled git ($(_SourceGitStamp)) to $(OutDir)git" Condition="'$(_SourceGitStamp)' != '$(_OutputGitStamp)'" />
+    <RemoveDir Directories="$(OutDir)git" Condition="'$(_SourceGitStamp)' != '$(_OutputGitStamp)'" />
+    <Copy SourceFiles="@(_BundledGitFile)" DestinationFiles="@(_BundledGitFile->'$(OutDir)git\%(RecursiveDir)%(Filename)%(Extension)')" Condition="'$(_SourceGitStamp)' != '$(_OutputGitStamp)'" />
+    <!-- 印は glob に入らない（. で始まる）ので、写し終えてから書く -->
+    <WriteLinesToFile File="$(OutputGitStamp)" Lines="$(_SourceGitStamp)" Overwrite="true" WriteOnlyWhenDifferent="true" Condition="'$(_SourceGitStamp)' != '$(_OutputGitStamp)'" />
+  </Target>
+
+</Project>
