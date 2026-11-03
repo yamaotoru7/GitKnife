@@ -33,3 +33,7 @@ pwsh tools/installer/build-installer.ps1        # installer → .work/installer/
 ## Reporting bugs
 
 Press Ctrl+Shift+F12 in the app. The report (screenshots, environment, the end of the log) is saved to `%LocalAppData%\GitKnife\bug-reports`, and a new issue is opened in the browser with the text filled in. Drag the screenshots from the opened folder into the issue.
+
+## License
+
+[MIT](LICENSE)
