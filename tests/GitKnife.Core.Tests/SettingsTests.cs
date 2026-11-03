@@ -53,6 +53,22 @@ public class SettingsTests : IDisposable
         Assert.Equal("https://git.example.com/dev/gitknife", same.BugReport.Edition);
     }
 
+    /// <summary>入れたリポジトリは更新とバグ報告の両方の送り先になり、分かっている扱いになる。サーバーが変われば Client ID は消す。</summary>
+    [Fact]
+    public void SetRepositorySetsBothDestinations()
+    {
+        var s = new AppSettings();
+        Assert.False(s.IsRepositoryKnown());
+        s.Update.ServerUrl = "https://git.example.com/"; s.Update.OAuthClientId = "id";
+        s.SetRepository("https://git.example.com/", "dev/gitknife");
+        Assert.True(s.IsRepositoryKnown());
+        Assert.Equal(("https://git.example.com/", "dev/gitknife", "id"), (s.Update.ServerUrl, s.Update.Repository, s.Update.OAuthClientId));
+        Assert.Equal(("https://git.example.com/", "dev/gitknife"), (s.BugReport.ServerUrl, s.BugReport.Repository));
+        s.SetRepository("https://github.com/", "owner/GitKnife");
+        Assert.Equal("", s.Update.OAuthClientId);
+        Assert.Equal("https://github.com/owner/GitKnife", s.BugReport.Edition);
+    }
+
     [Fact]
     public void RoundTripsAndKeepsUnknownKeys()
     {

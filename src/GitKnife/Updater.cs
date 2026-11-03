@@ -15,6 +15,7 @@ namespace GitKnife;
 /// <summary>
 /// 更新（配布先の Forgejo か GitHub のリリースから入れる。サインインが要るサーバーはブラウザで認証）。
 /// - File > Check for Updates...：必要ならブラウザでサインインしてもらい、新しい版があれば "Update Available" を出す。
+///   サーバーがサインインを求めているのに OAuth2 の Client ID が無ければ（インストーラに組み込まないので最初の 1 回）入れてもらう。
 /// - 起動時：インストールした GitKnife で、前の確認から 1 日たっていれば、ブラウザを開かずに確かめる（トークンが無ければログに書いて何もしない）。
 /// - "Update and Restart"：インストーラを落として照合し、黙って入れる引数で起動して GitKnife を閉じる。インストーラが終わったら起動し直す（GitKnife.iss の /RELAUNCH=1）。
 /// </summary>
@@ -60,16 +61,33 @@ internal static class Updater
         catch (Exception ex) { Log.Error($"Update check on startup failed: {ex}"); }
     }
 
-    /// <param name="interactive">メニューから。サインインにブラウザを開き、「最新です」や失敗も知らせる。</param>
+    /// <param name="interactive">
+    /// メニューから。サインインにブラウザを開き、「最新です」や失敗も知らせる。サーバーがサインインを求めているのに Client ID が無ければ入れてもらって続ける。
+    /// 自動（false）のときは、サインインが要れば何もしない。
+    /// </param>
     public static async Task CheckAsync(bool interactive)
     {
-        if (_dialogOpen) return;
+        if (await CheckOnceAsync(interactive) && interactive) await CheckOnceAsync(interactive);
+    }
+
+    /// <summary>確かめる。Client ID を入れてもらったのでもう一度確かめるときは true。</summary>
+    private static async Task<bool> CheckOnceAsync(bool interactive)
+    {
+        if (_dialogOpen) return false;
         if (_pending is not null)
         {
             // 前の確認がブラウザの許可を待っている（許可画面でエラーになるとブラウザは戻ってこない）。押し直しはやり直しとみなす
-            if (!interactive) return;
+            if (!interactive) return false;
             Log.Info("Check for Updates pressed again: canceling the previous check");
             _pending.Cancel();
+        }
+        // ダウンロード元が分からなかった（インストーラが読めなかった）：手動なら送り先を入れてもらう。自動なら今の値（既定は GitHub）で確かめる
+        if (interactive && !App.Settings.IsRepositoryKnown())
+        {
+            Log.Info("Update source is not known: asking for the repository");
+            _dialogOpen = true;
+            try { if (!Views.Dialogs.DialogWindow.Run(new ViewModels.Dialogs.RepositoryUrlDialogViewModel(), out _)) return false; }
+            finally { _dialogOpen = false; }
         }
         using var cts = new CancellationTokenSource();
         _pending = cts;
@@ -77,13 +95,19 @@ internal static class Updater
         {
             var s = App.Settings.Update;
             Log.Info($"Checking for updates ({s.ServerUrl.Trim().TrimEnd('/')}/{s.Repository}, current {ProductInfo.Version}{(interactive ? "" : ", automatic")})");
-            using var client = new UpdateClient(s.ServerUrl, s.Repository, s.EffectiveOAuthClientId, s.OAuthScope, new TokenStore(s));
+            using var client = new UpdateClient(s.ServerUrl, s.Repository, s.OAuthClientId, s.OAuthScope, new TokenStore(s));
             ReleaseInfo? latest;
             try { latest = await client.GetLatestReleaseAsync(interactive ? OpenBrowser : null, cts.Token); }
-            catch (SignInRequiredException)
+            catch (SignInRequiredException ex)
             {
+                if (interactive && ex.NeedsClientId)
+                {
+                    Log.Info("Update server requires sign-in, but no OAuth2 Client ID is set: asking for it");
+                    _dialogOpen = true;
+                    return Views.Dialogs.DialogWindow.Run(new ViewModels.Dialogs.UpdateClientIdDialogViewModel(s.ServerUrl), out _);
+                }
                 Log.Info("Update check skipped: sign-in to the update server is required (File > Check for Updates...)");
-                return;
+                return false;
             }
             App.Settings.LastUpdateCheck = DateTime.Now.ToString("o", CultureInfo.InvariantCulture);
             App.SaveSettings();
@@ -92,20 +116,20 @@ internal static class Updater
             if (latest is null || !UpdateVersion.IsNewer(latest, ProductInfo.Version))
             {
                 if (interactive) Alerts.ShowInfo("Check for Updates", $"GitKnife {ProductInfo.Version} is the latest version.");
-                return;
+                return false;
             }
             if (latest.Installer is null)
             {
                 Log.Warning($"Release {latest.TagName} has no installer asset");
                 if (interactive) Alerts.ShowError("Check for Updates", $"GitKnife {latest.Version} is available, but the release has no installer.\n{latest.HtmlUrl}");
-                return;
+                return false;
             }
 
             var notes = await NotesSinceCurrentAsync(client, latest, cts.Token);
             _pending = null;
             _dialogOpen = true;
             var vm = new ViewModels.Dialogs.UpdateDialogViewModel(client, latest, notes);
-            if (!Views.Dialogs.DialogWindow.Run(vm, out _) || vm.InstallerPath is null) return;
+            if (!Views.Dialogs.DialogWindow.Run(vm, out _) || vm.InstallerPath is null) return false;
             Install(vm.InstallerPath);
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested) { Log.Info("Update check canceled"); }
@@ -119,6 +143,7 @@ internal static class Updater
             if (_pending == cts) _pending = null;
             _dialogOpen = false;
         }
+        return false;
     }
 
     /// <summary>今の版から最新までのリリースノート。途中の版が読めなくても更新は止めず、最新のノートだけを出す。</summary>

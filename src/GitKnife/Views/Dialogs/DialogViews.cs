@@ -61,6 +61,12 @@ internal static class DialogViews
         EditCustomActionDialogViewModel => EditCustomActionBody(),
         EditCustomControlsDialogViewModel cv => EditCustomControlsBody(cv),
         GoToLineDialogViewModel => new Form().Row("Line number:", Text("LineNumberTextBox", "LineNumber")),
+        RepositoryUrlDialogViewModel ru => new Form()
+            .Row("Repository:", Text("RepositoryUrlTextBox", "RepositoryUrl").Hint("https://github.com/owner/repo", "Icon.Link"))
+            .Row(null, Note(ru.NoteText), 22),
+        UpdateClientIdDialogViewModel u => new Form()
+            .Row("Client ID:", Text("ClientIdTextBox", "ClientId").Hint("OAuth2 application Client ID"))
+            .Row(null, Note(u.NoteText), 40),
         RenameBranchDialogViewModel => new Form()
             .Row("New Name:", Text("BranchNameTextBox", "BranchName").Hint(null, "Icon.Branch"))
             .Row(null, Check("RenameRemoteBranchCheckbox", "", "RenameRemote").With(c => c.SetBinding(System.Windows.Controls.ContentControl.ContentProperty, new System.Windows.Data.Binding("RenameRemoteText"))), 26, visibleWhen: "HasUpstream"),
@@ -795,8 +801,8 @@ internal static class DialogViews
             .Row(null, Horizontal(
                 Check("IncludeScreenshotsCheckBox", "Attach screenshot", "IncludeScreenshots").With(c => { c.Margin = new Thickness(0, 0, 16, 0); c.IsEnabled = vm.Images.Count > 0; }),
                 Check("IncludeLogCheckBox", "Attach log", "IncludeLog")), 26)
-            .Row("Server:", Text("ServerUrlTextBox", "ServerUrl").WithoutAutoFocus().Hint("GitHub or Forgejo URL (empty: save only)", "Icon.Link"))
-            .Row("Repository:", Text("RepositoryTextBox", "Repository").WithoutAutoFocus().Hint("owner/repo"))
+            .Row("Repository:", Text("RepositoryUrlTextBox", "RepositoryUrl").WithoutAutoFocus().Hint("https://github.com/owner/repo (empty: save only)", "Icon.Link"))
+            .Row(null, Note(vm.RepositoryUnknownText), 34, visibleWhen: "RepositoryUnknown")
             // 何をすればよいかが分かる文言にする（#9）
             .Row(null, Note("Sign in to the server in the browser, drag the screenshots from the opened folder, then submit the issue."), 22)
             .Row(null, Note($"A copy is saved to {Core.Reporting.BugReport.DefaultDirectory}"), 22);

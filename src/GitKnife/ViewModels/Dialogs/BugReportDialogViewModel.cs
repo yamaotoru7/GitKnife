@@ -28,14 +28,19 @@ public sealed partial class BugReportDialogViewModel : DialogViewModel
         _activeWindowTitle = activeWindowTitle;
         Images = images.Select(i => new BugReportImageChoice(i, ToBitmap(i.Png))).ToList();
         foreach (var c in Images) c.PropertyChanged += (_, _) => OnPropertyChanged(nameof(IncludeScreenshots));
+        // ダウンロード元が分からなかったときは空にして入れてもらう（入れた URL は更新の送り先にもなる）
         var s = App.Settings.BugReport;
-        _serverUrl = s.ServerUrl;
-        _repository = s.Repository;
+        RepositoryUnknown = !App.Settings.IsRepositoryKnown();
+        _repositoryUrl = RepositoryUnknown ? "" : Core.Distribution.RepositoryUrl(s.ServerUrl, s.Repository);
     }
 
     public override string Title => "Report a Bug";
     public override string Subtitle => "Opens a new issue in the browser with the environment and the end of the log filled in.";
-    public override string SubmitText => ServerUrl.Trim().Length == 0 ? "Save" : "Open in Browser";
+    public override string SubmitText => RepositoryUrl.Trim().Length == 0 ? "Save" : "Open in Browser";
+
+    /// <summary>送り先のリポジトリが分からない（入れてもらう。案内を出す）。</summary>
+    public bool RepositoryUnknown { get; }
+    public string RepositoryUnknownText => $"Enter the repository you downloaded GitKnife from (for example {Core.Distribution.RepositoryUrl(Core.Distribution.DefaultServerUrl, Core.Distribution.DefaultRepository)}). It is also used to check for updates.";
     public override double DialogWidth => 640;
 
     public IReadOnlyList<BugReportImageChoice> Images { get; }
@@ -57,8 +62,8 @@ public sealed partial class BugReportDialogViewModel : DialogViewModel
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(CanSubmit), nameof(CanSubmitNow))] private string _issueTitle = "";
     [ObservableProperty] private string _description = "";
     [ObservableProperty] private bool _includeLog = true;
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(SubmitText))] private string _serverUrl;
-    [ObservableProperty] private string _repository;
+    /// <summary>送り先（"https://github.com/owner/repo"。空なら保存だけ）。</summary>
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(SubmitText))] private string _repositoryUrl;
 
     public override bool CanSubmit => IssueTitle.Trim().Length > 0;
 
@@ -102,15 +107,16 @@ public sealed partial class BugReportDialogViewModel : DialogViewModel
     {
         var report = Build();
         // 送り先の設定は送る前に覚える（送れなくても次に入れ直さなくてよい）
+        // 入れたリポジトリは更新の送り先にもなる（同じリポジトリにリリースと Issue がある）。空なら保存だけ
         var s = App.Settings.BugReport;
-        s.ServerUrl = ServerUrl.Trim();
-        s.Repository = Repository.Trim();
-        App.SaveSettings();
-        if (s.ServerUrl.Length > 0)
+        if (RepositoryUrl.Trim().Length == 0)
         {
-            if (!Uri.TryCreate(s.ServerUrl, UriKind.Absolute, out var u) || u.Scheme is not ("https" or "http")) Fail("Server must be a URL like https://github.com/.");
-            if (s.Repository.Split('/', StringSplitOptions.RemoveEmptyEntries).Length != 2) Fail("Repository must be 'owner/repo'.");
+            s.ServerUrl = "";
+            s.Repository = "";
         }
+        else if (Core.Distribution.ParseRepositoryUrl(RepositoryUrl) is { } r) App.Settings.SetRepository(r.ServerUrl, r.Repository);
+        else Fail("Repository must be a URL like https://github.com/owner/repo.");
+        App.SaveSettings();
 
         // もう一度押したときも保存は 1 回だけ
         _savedDirectory ??= await Task.Run(() => report.Save(), ct);

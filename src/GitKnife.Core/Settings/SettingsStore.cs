@@ -18,11 +18,11 @@ public static class SettingsStore
 
     public static string DefaultPath => Path.Combine(ProductInfo.AppDataDirectory, "settings.json");
 
-    /// <summary>読んで、送り先をこの版（配布先）にそろえる。</summary>
+    /// <summary>読んで、インストーラがダウンロード元を書き残していれば、送り先をその配布先にそろえる（無ければ設定のまま）。</summary>
     public static AppSettings Load(string? path = null)
     {
         var s = Read(path);
-        s.ApplyDistribution(Distribution.ServerUrl, Distribution.Repository);
+        if (Distribution.FromInstallSource) s.ApplyDistribution(Distribution.ServerUrl, Distribution.Repository);
         return s;
     }
 

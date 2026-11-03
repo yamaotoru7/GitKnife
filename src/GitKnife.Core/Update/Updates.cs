@@ -62,8 +62,14 @@ public static class UpdateVersion
     }
 }
 
-/// <summary>サインインが要るが、対話できない（起動時の自動の確認）。</summary>
-public sealed class SignInRequiredException() : Exception("Sign-in to the update server is required.");
+/// <summary>
+/// サインインが要るが、対話できない（起動時の自動の確認）。NeedsClientId なら、サーバーがサインインを求めているのに
+/// OAuth2 の Client ID が無い（手動の確認で入れてもらう）。
+/// </summary>
+public sealed class SignInRequiredException(bool needsClientId = false) : Exception("Sign-in to the update server is required.")
+{
+    public bool NeedsClientId { get; } = needsClientId;
+}
 
 /// <summary>トークンの置き場所（アプリは Windows の資格情報マネージャー）。</summary>
 public interface ITokenStore
@@ -76,7 +82,8 @@ public interface ITokenStore
 /// 更新の確認とダウンロード（Forgejo か GitHub のリリースにある Inno Setup のインストーラ）。
 /// clientId があれば OAuth2 のトークンを付けて呼ぶ（サインインした人にしか API を見せない Forgejo 用）。
 /// 期限切れなら refresh token で取り直し、それもだめなら（対話できるときだけ）ブラウザでサインインしてもらう。
-/// clientId が空か GitHub なら、サインインせずに読む。
+/// clientId が空か GitHub なら、サインインせずに読む。Forgejo がサインインを求めたら（401、403、リポジトリが見えない）
+/// SignInRequiredException(needsClientId: true)。
 /// </summary>
 public sealed class UpdateClient : IDisposable
 {
@@ -87,6 +94,8 @@ public sealed class UpdateClient : IDisposable
     private readonly string _repoApi;
     private readonly ForgejoOAuth? _oauth;
     private readonly ITokenStore _store;
+    /// <summary>サインインせずに読む Forgejo（サインインを求められたら Client ID が要ると知らせる）。</summary>
+    private readonly bool _anonymousForgejo;
 
     public UpdateClient(string serverUrl, string repository, string clientId, string scope, ITokenStore store, HttpMessageHandler? handler = null)
     {
@@ -104,7 +113,8 @@ public sealed class UpdateClient : IDisposable
         else
         {
             _repoApi = $"{serverUrl.Trim().TrimEnd('/')}/api/v1/repos/{repo}";
-            if (!string.IsNullOrWhiteSpace(clientId)) _oauth = new ForgejoOAuth(_http, serverUrl, clientId, scope);
+            if (!string.IsNullOrWhiteSpace(clientId)) _oauth = new ForgejoOAuth(_http, serverUrl, clientId.Trim(), scope);
+            else _anonymousForgejo = true;
         }
         _store = store;
     }
@@ -114,7 +124,16 @@ public sealed class UpdateClient : IDisposable
     public async Task<ReleaseInfo?> GetLatestReleaseAsync(Action<string>? openBrowser, CancellationToken ct = default)
     {
         using var r = await SendAuthorizedAsync(() => new HttpRequestMessage(HttpMethod.Get, $"{_repoApi}/releases/latest"), openBrowser, ct).ConfigureAwait(false);
-        if (r.StatusCode == HttpStatusCode.NotFound) return null;
+        if (r.StatusCode == HttpStatusCode.NotFound)
+        {
+            // リリースが無いのか、非公開でリポジトリが見えないのか（Forgejo は見えないリポジトリにも 404 を返す）
+            if (_anonymousForgejo)
+            {
+                using var repo = await SendAuthorizedAsync(() => new HttpRequestMessage(HttpMethod.Get, _repoApi), null, ct).ConfigureAwait(false);
+                if (repo.StatusCode == HttpStatusCode.NotFound) throw new SignInRequiredException(needsClientId: true);
+            }
+            return null;
+        }
         await EnsureSuccessAsync(r, "Reading the latest release", ct).ConfigureAwait(false);
         var dto = await r.Content.ReadFromJsonAsync<ReleaseDto>(ct).ConfigureAwait(false) ?? throw new InvalidOperationException("Empty response");
         return ToReleaseInfo(dto);
@@ -193,7 +212,13 @@ public sealed class UpdateClient : IDisposable
         if (_oauth is null)
         {
             using var request = make();
-            return await _http.SendAsync(request, option, ct).ConfigureAwait(false);
+            var anonymous = await _http.SendAsync(request, option, ct).ConfigureAwait(false);
+            if (_anonymousForgejo && anonymous.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+            {
+                anonymous.Dispose();
+                throw new SignInRequiredException(needsClientId: true);
+            }
+            return anonymous;
         }
         var tokens = await GetTokensAsync(openBrowser, forceRenew: false, ct).ConfigureAwait(false);
         var r = await SendAsync(make, tokens, option, ct).ConfigureAwait(false);

@@ -159,6 +159,22 @@ public sealed class AppSettings
     }
 
     private static string EditionKey(string serverUrl, string repository) => $"{serverUrl.Trim().TrimEnd('/')}/{repository.Trim().Trim('/')}";
+
+    /// <summary>
+    /// 更新とバグ報告の送り先（同じリポジトリ）が分かっているか。インストーラがダウンロード元を読めた、ユーザーが入れた、前の版で決まっていた。
+    /// 分からなければ、手動の更新確認とバグ報告のときに入れてもらう。
+    /// </summary>
+    public bool IsRepositoryKnown() => Update.Edition.Length > 0;
+
+    /// <summary>ユーザーが入れたリポジトリを、更新とバグ報告の両方の送り先にする。サーバーが変われば Client ID は消す。</summary>
+    public void SetRepository(string serverUrl, string repository)
+    {
+        var edition = EditionKey(serverUrl, repository);
+        if (!EditionKey(Update.ServerUrl, "").Equals(EditionKey(serverUrl, ""), StringComparison.OrdinalIgnoreCase)) Update.OAuthClientId = "";
+        BugReport.ServerUrl = Update.ServerUrl = serverUrl;
+        BugReport.Repository = Update.Repository = repository;
+        BugReport.Edition = Update.Edition = edition;
+    }
     /// <summary>
     /// 登録した SSH のホスト（T1301。Preferences > Hosts）。リポジトリは \\gitknife-ssh\&lt;Name&gt;\… で表し、git は ssh で Destination に入って動かす。
     /// WSL はパスで決まるので登録しない。
@@ -256,12 +272,10 @@ public sealed class UpdateSettings
     /// <summary>"owner/repo"。</summary>
     public string Repository { get; set; } = Distribution.Repository;
     /// <summary>
-    /// Forgejo に登録した OAuth2 アプリの Client ID。空なら配布先の <see cref="Distribution.OAuthClientId"/>
-    /// （既定値を settings.json に書き込まず、前の版が空のまま保存していても組み込みの値が使われるように）。
-    /// 両方空ならサインインせずに読む（GitHub と公開の Forgejo）。
+    /// サインインが要る Forgejo に登録した OAuth2 アプリの Client ID。空ならサインインせずに読む（GitHub と公開の Forgejo）。
+    /// インストーラはどの配布先でも同じなので組み込まない。手動の確認でサインインが要ると分かったときに入れてもらう。
     /// </summary>
     public string OAuthClientId { get; set; } = "";
-    [JsonIgnore] public string EffectiveOAuthClientId => string.IsNullOrWhiteSpace(OAuthClientId) ? Distribution.OAuthClientId : OAuthClientId.Trim();
     /// <summary>OAuth2 で求める権限（空なら指定しない）。</summary>
     public string OAuthScope { get; set; } = "read:repository";
     /// <summary>起動時に 1 日 1 回確かめる。</summary>

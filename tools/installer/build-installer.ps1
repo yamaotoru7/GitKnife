@@ -5,23 +5,16 @@
   1. 同梱の git を用意する（tools/git/fetch-portable-git.ps1。用意済みなら何もしない）
   2. self-contained で publish する（win-x64、Release → .work/publish）
   3. Inno Setup 6 の ISCC で installer/GitKnife.iss をコンパイルする（版は Directory.Build.props の <Version>）
-  -Distribution github を付けると、Distribution.props を読まずに GitHub 版（更新とバグ報告の送り先が GitHub）を作る → .work/installer/github/
+  インストーラは配布先によらず同じもの。配布先（更新とバグ報告の送り先）はダウンロードした場所で決まる（GitKnife.iss の install-source.txt）
 .EXAMPLE
   pwsh tools/installer/build-installer.ps1
-.EXAMPLE
-  pwsh tools/installer/build-installer.ps1 -Distribution github
 #>
-param([string]$Iscc, [string]$Distribution)
+param([string]$Iscc)
 $ErrorActionPreference = 'Stop'
 
 $root = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $publish = Join-Path $root '.work/publish'
 $output = Join-Path $root '.work/installer'
-$extra = @()
-if ($Distribution) {
-  $extra = @("-p:GkDistribution=$Distribution")
-  $output = Join-Path $output $Distribution
-}
 $gitDir = Join-Path $root 'vendor/portable-git'
 
 if (-not $Iscc) {
@@ -40,7 +33,7 @@ if ($LASTEXITCODE -ne 0) { throw 'fetch-portable-git failed' }
 $version = $props.Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
 
 if (Test-Path $publish) { Remove-Item -Recurse -Force $publish }
-dotnet publish (Join-Path $root 'src/GitKnife') -c Release -r win-x64 --self-contained -o $publish -v q -nologo @extra
+dotnet publish (Join-Path $root 'src/GitKnife') -c Release -r win-x64 --self-contained -o $publish -v q -nologo
 if ($LASTEXITCODE -ne 0) { throw 'dotnet publish failed' }
 
 & $Iscc "/DAppVersion=$version" "/DPublishDir=$publish" "/DGitDir=$gitDir" "/DOutputDir=$output" (Join-Path $root 'installer/GitKnife.iss')

@@ -83,16 +83,44 @@ public class UpdateTests : IDisposable
         Assert.Null(server.LastAuthorization);
     }
 
-    /// <summary>どの URL にも同じリリースを返す（認証を求めない）。</summary>
+    /// <summary>Client ID が無いのに Forgejo がサインインを求めたら（403、非公開で 404）、Client ID が要ると知らせる。</summary>
+    [Theory]
+    [InlineData(HttpStatusCode.Forbidden, HttpStatusCode.Forbidden)]
+    [InlineData(HttpStatusCode.Unauthorized, HttpStatusCode.Unauthorized)]
+    [InlineData(HttpStatusCode.NotFound, HttpStatusCode.NotFound)]
+    public async Task ForgejoAskingForSignInNeedsClientId(HttpStatusCode latest, HttpStatusCode repo)
+    {
+        var server = new FakeGitHub { Latest = latest, Repo = repo };
+        using var client = new UpdateClient("https://forge.example/", "owner/gitknife", "", "", new MemoryStore(), server);
+        var ex = await Assert.ThrowsAsync<SignInRequiredException>(() => client.GetLatestReleaseAsync(openBrowser: _ => { }));
+        Assert.True(ex.NeedsClientId);
+    }
+
+    /// <summary>リポジトリは見えてリリースが無いだけ（404）なら、null（最新）。</summary>
+    [Fact]
+    public async Task ForgejoWithoutReleasesIsNotSignIn()
+    {
+        var server = new FakeGitHub { Latest = HttpStatusCode.NotFound };
+        using var client = new UpdateClient("https://forge.example/", "owner/gitknife", "", "", new MemoryStore(), server);
+        Assert.Null(await client.GetLatestReleaseAsync(openBrowser: null));
+        Assert.Equal(["https://forge.example/api/v1/repos/owner/gitknife/releases/latest", "https://forge.example/api/v1/repos/owner/gitknife"], server.Requests);
+    }
+
+    /// <summary>どの URL にも同じリリースを返す（認証を求めない）。Latest / Repo で /releases/latest とリポジトリの応答を変えられる。</summary>
     private sealed class FakeGitHub : HttpMessageHandler
     {
         public List<string> Requests { get; } = [];
         public string? LastAuthorization { get; private set; }
+        public HttpStatusCode Latest { get; init; } = HttpStatusCode.OK;
+        public HttpStatusCode Repo { get; init; } = HttpStatusCode.OK;
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
-            Requests.Add(request.RequestUri!.ToString());
+            var url = request.RequestUri!.ToString();
+            Requests.Add(url);
             LastAuthorization = request.Headers.Authorization?.ToString();
+            var status = url.EndsWith("/releases/latest") ? Latest : url.EndsWith("/gitknife") ? Repo : HttpStatusCode.OK;
+            if (status != HttpStatusCode.OK) return Task.FromResult(new HttpResponseMessage(status) { Content = new StringContent("{}") });
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent("""{"tag_name":"v0.2.0","name":"0.2.0","body":"notes","assets":[]}""", Encoding.UTF8, "application/json"),
