@@ -73,6 +73,23 @@ public static partial class RemoteWebLinks
         return web;
     }
 
+    /// <summary>
+    /// クリップボードの文字がリモートの URL に見えるか（Add Remote で Repository Url に先に入れる。#14）。
+    /// 1 行で空白を含まず、https / http / ssh / git の URL でパスがあるもの、または user@host:path の形。
+    /// </summary>
+    public static bool LooksLikeRemoteUrl(string? text)
+    {
+        var url = text?.Trim() ?? "";
+        if (url.Length == 0 || url.Any(char.IsWhiteSpace)) return false;
+        if (url.Contains("://", StringComparison.Ordinal))
+        {
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var u) || u.Host.Length == 0) return false;
+            if (u.Scheme is not ("https" or "http" or "ssh" or "git")) return false;
+            return u.AbsolutePath.Trim('/').Length > 0;
+        }
+        return url.Contains('@') && ScpLike().Match(url) is { Success: true } m && m.Groups["path"].Value.Trim('/').Length > 0;
+    }
+
     // user@host:path（Windows のドライブ C:\... と区別するため、host は 2 文字以上）
     [GeneratedRegex(@"^(?:[^@/\s]+@)?(?<host>[A-Za-z0-9.-]{2,}):(?<path>[^\\].*)$")]
     private static partial Regex ScpLike();

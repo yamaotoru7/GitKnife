@@ -86,17 +86,14 @@ public partial class App : Application
         window.Show();
         _ = ListenForOtherInstancesAsync(vm, window);
 
-        // 起動引数のリポジトリ（A07）。なければ前回のワークスペースのタブを復元する
+        // 前回のワークスペースのタブを復元し、起動引数のリポジトリ（A07）はその後ろに足す。
+        // 引数のリポジトリだけを開くと、ワークスペースのタブの一覧がそれ 1 つで上書き保存される（2026-11-04 に Tools のタブが消えた）
         var paths = e.Args.Where(a => !a.StartsWith('-')).ToList();
-        if (paths.Count == 0)
+        var ws = Settings.Workspaces.All.FirstOrDefault(w => w.Name == Settings.Workspaces.ActiveWorkspace);
+        if (ws is not null)
         {
-            var ws = Settings.Workspaces.All.FirstOrDefault(w => w.Name == Settings.Workspaces.ActiveWorkspace);
-            if (ws is not null)
-            {
-                Log.Info($"Restore workspace '{ws.Name}' with {ws.Repositories.Count} tabs");
-                await vm.RestoreTabsAsync(ws.Repositories.Where(ExistsOrRemote).ToList(), ws.ActiveRepository);
-                return;
-            }
+            Log.Info($"Restore workspace '{ws.Name}' with {ws.Repositories.Count} tabs");
+            await vm.RestoreTabsAsync(ws.Repositories.Where(ExistsOrRemote).ToList(), ws.ActiveRepository);
         }
         foreach (var p in paths) await vm.OpenAsync(System.IO.Path.GetFullPath(p));
     }

@@ -49,6 +49,21 @@ public class RepositorySummaryReaderTests(SandboxFixture sandbox)
         Assert.Equal((null, null), RemoteWebLinks.For(@"\\server\share\repo.git"));
     }
 
+    [Theory]
+    [InlineData("https://github.com/owner/repo.git", true)]
+    [InlineData("  https://git.example.com/g/p  \r\n", true)]
+    [InlineData("git@github.com:owner/repo.git", true)]
+    [InlineData("ssh://git@host:2222/owner/repo.git", true)]
+    [InlineData("git://host/repo", true)]
+    [InlineData("https://github.com/", false)]
+    [InlineData("https://github.com/owner/repo and more", false)]
+    [InlineData("ftp://host/repo", false)]
+    [InlineData(@"C:\Proj\repo", false)]
+    [InlineData("note:something", false)]
+    [InlineData("origin", false)]
+    [InlineData("", false)]
+    public void RecognizesRemoteUrlOnClipboard(string text, bool expected) => Assert.Equal(expected, RemoteWebLinks.LooksLikeRemoteUrl(text));
+
     [Fact]
     public void ConvertsBetweenHttpsAndSsh()
     {

@@ -223,7 +223,19 @@ public sealed partial class RemoteEditDialogViewModel : DialogViewModel
         _repo = repo;
         _original = original;
         _name = original?.Name ?? "origin";
-        _url = original?.FetchUrl ?? "";
+        // 追加のときは、クリップボードにリモートの URL があれば先に入れる（#14）
+        _url = original?.FetchUrl ?? ClipboardRemoteUrl();
+    }
+
+    /// <summary>クリップボードの文字がリモートの URL ならそれ、そうでなければ ""。</summary>
+    public static string ClipboardRemoteUrl()
+    {
+        try
+        {
+            var text = System.Windows.Clipboard.ContainsText() ? System.Windows.Clipboard.GetText() : "";
+            return Core.Git.RemoteWebLinks.LooksLikeRemoteUrl(text) ? text.Trim() : "";
+        }
+        catch (System.Runtime.InteropServices.ExternalException) { return ""; } // ほかのアプリがクリップボードを開いている
     }
 
     public bool IsNew => _original is null;
