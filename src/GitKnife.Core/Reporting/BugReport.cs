@@ -19,16 +19,22 @@ public sealed class BugReport
     /// <summary>環境（版、OS、git、開いているリポジトリなど）。表にする。</summary>
     public List<KeyValuePair<string, string>> Environment { get; } = [];
     public string? LogTail { get; set; }
-    /// <summary>作った Issue の担当（Report a Bug の "Assign to …"。#8）。保存する report.md には入れない。</summary>
-    public List<string> Assignees { get; } = [];
     public DateTime CreatedAt { get; init; } = DateTime.Now;
+
+    /// <summary>
+    /// New issue の本文の先頭に入れる目印（表示されない HTML コメント）。担当が付いていなくても、GitKnife のバグ報告で作った Issue を見分けられるように。
+    /// </summary>
+    public const string IssueMarker = "<!-- gitknife-bug-report -->";
 
     public static string DefaultDirectory => Path.Combine(ProductInfo.AppDataDirectory, "bug-reports");
 
     /// <summary>
     /// Issue の本文（Markdown）。imageUrls が null なら保存用（画像はファイル名で参照）、空なら画像を載せない（添付する前の本文）。
     /// </summary>
-    public string ToMarkdown(IReadOnlyList<string>? imageUrls = null)
+    public string ToMarkdown(IReadOnlyList<string>? imageUrls = null) => Body(imageUrls, LogTail, null);
+
+    /// <summary>本文。log はログのうち載せる部分、logSummary は折りたたみの見出し（null なら "Log (last N lines)"）。</summary>
+    private string Body(IReadOnlyList<string>? imageUrls, string? log, string? logSummary)
     {
         var sb = new StringBuilder();
         if (Description.Trim().Length > 0) sb.AppendLine(Description.Trim()).AppendLine();
@@ -40,12 +46,13 @@ public sealed class BugReport
             foreach (var (k, v) in Environment) sb.AppendLine($"| {Escape(k)} | {Escape(v)} |");
             sb.AppendLine();
         }
-        if (LogTail is { Length: > 0 })
+        if (log is { Length: > 0 })
         {
-            sb.AppendLine($"<details><summary>Log (last {LogTailLines} lines)</summary>").AppendLine();
-            var fence = LogTail.Contains("```") ? "~~~~" : "```";
-            sb.AppendLine(fence).AppendLine(LogTail.TrimEnd()).AppendLine(fence).AppendLine().AppendLine("</details>");
+            sb.AppendLine($"<details><summary>{logSummary ?? $"Log (last {LogTailLines} lines)"}</summary>").AppendLine();
+            var fence = log.Contains("```") ? "~~~~" : "```";
+            sb.AppendLine(fence).AppendLine(log.TrimEnd()).AppendLine(fence).AppendLine().AppendLine("</details>");
         }
+        else if (logSummary is not null) sb.AppendLine(logSummary);
         // 改行は LF にそろえる（AppendLine は Windows で CRLF）
         return sb.ToString().Replace("\r\n", "\n").TrimEnd() + "\n";
     }
@@ -61,6 +68,7 @@ public sealed class BugReport
         Directory.CreateDirectory(dir);
         foreach (var img in Images) File.WriteAllBytes(Path.Combine(dir, img.FileName), img.Png);
         File.WriteAllText(Path.Combine(dir, "report.md"), $"# {Title}\n\n" + ToMarkdown(), new UTF8Encoding(false));
+        if (LogTail is { Length: > 0 }) File.WriteAllText(Path.Combine(dir, LogFileName), LogTail.TrimEnd() + "\n", new UTF8Encoding(false));
         return dir;
     }
 
@@ -78,36 +86,35 @@ public sealed class BugReport
         catch (UnauthorizedAccessException) { return null; }
     }
 
-    /// <summary>
-    /// Forgejo に送る：Issue を作り、画像を添付し、本文に画像を埋める。作った Issue を返す。
-    /// </summary>
-    public async Task<CreatedIssue> SendAsync(ForgejoIssueClient client, CancellationToken ct = default)
-    {
-        var issue = await client.CreateIssueAsync(Title, ToMarkdown([]), Assignees, ct);
-        if (Images.Count == 0) return issue;
-        var urls = new List<string>();
-        foreach (var img in Images) urls.Add(await client.UploadAttachmentAsync(issue.Number, img.FileName, img.Png, "image/png", ct));
-        await client.UpdateBodyAsync(issue.Number, ToMarkdown(urls), ct);
-        return issue;
-    }
+    /// <summary>保存したフォルダに書くログ全体のファイル名（GitHub も Forgejo も .txt は Issue に添付できる）。</summary>
+    public const string LogFileName = "log.txt";
 
     /// <summary>GitHub の New issue の URL に載せる長さの上限（ブラウザとサーバーが受け付ける長さより短めに）。</summary>
     public const int MaxGitHubUrlLength = 7500;
 
     /// <summary>
-    /// GitHub の New issue の画面の URL（題名と本文を入れておく）。GitHub はトークンなしでは Issue を作れず、画像も API で添付できないので、
-    /// ブラウザで開いて、保存したフォルダの画像を貼ってもらう。長すぎるときはログを本文から外す（保存したフォルダの report.md にある）。
+    /// New issue の画面の URL（題名と本文を入れておく。GitHub と Forgejo は同じ形）。画像は保存したフォルダから貼ってもらう。
+    /// 長すぎるときは、ログを新しい側から入るだけ載せ、残りは保存したフォルダの log.txt を貼ってもらう。
     /// </summary>
-    public string GitHubNewIssueUrl(string serverUrl, string repository)
+    public string NewIssueUrl(string serverUrl, string repository, int maxLength = MaxGitHubUrlLength)
     {
         var baseUrl = $"{serverUrl.Trim().TrimEnd('/')}/{repository.Trim().Trim('/')}/issues/new";
-        var note = Images.Count > 0 ? $"<!-- Drag the screenshots ({string.Join(", ", Images.Select(i => i.FileName))}) from the saved report folder here. -->\n\n" : "";
+        var note = IssueMarker + "\n" + (Images.Count > 0 ? $"<!-- Drag the screenshots ({string.Join(", ", Images.Select(i => i.FileName))}) from the saved report folder here. -->\n" : "") + "\n";
         string Make(string body) => $"{baseUrl}?title={Uri.EscapeDataString(Title)}&body={Uri.EscapeDataString(note + body)}";
         var url = Make(ToMarkdown([]));
-        if (url.Length <= MaxGitHubUrlLength || LogTail is null) return url;
-        var log = LogTail;
-        LogTail = null;
-        try { return Make(ToMarkdown([]) + "\n(The log is in report.md in the saved report folder.)\n"); }
-        finally { LogTail = log; }
+        if (url.Length <= maxLength || LogTail is not { Length: > 0 }) return url;
+
+        // 載せる行数を二分探索で決める（新しい行ほど大事なので末尾から）
+        var lines = LogTail.TrimEnd().Split('\n');
+        string With(int n) => Make(Body([], string.Join("\n", lines[^n..]),
+            n > 0 ? $"Log (last {n} of {lines.Length} lines; drag {LogFileName} from the saved report folder for all)"
+                  : $"(Drag {LogFileName} from the saved report folder for the log.)"));
+        int lo = 0, hi = lines.Length - 1;
+        while (lo < hi)
+        {
+            var mid = (lo + hi + 1) / 2;
+            if (With(mid).Length <= maxLength) lo = mid; else hi = mid - 1;
+        }
+        return With(lo);
     }
 }

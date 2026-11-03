@@ -767,10 +767,7 @@ internal static class DialogViews
         return new System.Windows.Controls.StackPanel { Children = { filter, list, buttons } };
     }
 
-    /// <summary>
-    /// Report a Bug の本文：撮った画面の縮小（横に並べる）、題名・説明、付けるもの、送り先（Forgejo か GitHub）。
-    /// トークンは PasswordBox（束縛できないので PasswordChanged で VM に入れる）。
-    /// </summary>
+    /// <summary>Report a Bug の本文：撮った画面の縮小（横に並べる）、題名・説明、付けるもの、送り先（GitHub か Forgejo）。</summary>
     private static FrameworkElement BugReportBody(BugReportDialogViewModel vm)
     {
         var previews = new System.Windows.Controls.StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal };
@@ -791,38 +788,17 @@ internal static class DialogViews
         }
         if (vm.Images.Count == 0) previews.Children.Add(Note("No screenshot"));
 
-        var token = new System.Windows.Controls.PasswordBox { Height = 24, Password = vm.Token, VerticalContentAlignment = VerticalAlignment.Center, Padding = new Thickness(4, 0, 4, 0) };
-        System.Windows.Automation.AutomationProperties.SetAutomationId(token, "TokenPasswordBox");
-        token.SetResourceReference(System.Windows.Controls.Control.BackgroundProperty, "Gk.Input.Background");
-        token.SetResourceReference(System.Windows.Controls.Control.BorderBrushProperty, "Gk.Input.Border");
-        token.SetResourceReference(System.Windows.Controls.Control.ForegroundProperty, "Gk.Text");
-        token.SetResourceReference(System.Windows.Controls.PasswordBox.CaretBrushProperty, "Gk.Text");
-        token.PasswordChanged += (_, _) => vm.Token = token.Password;
-
-        // GitHub はブラウザで New issue を開くだけなので、トークン・担当・証明書の欄は使わない
-        var assign = Check("AssignIssueCheckBox", vm.AssignText, "AssignIssue");
-        var untrusted = Check("AllowUntrustedCertificateCheckBox", "Allow self-signed certificates (in-house servers only)", "AllowUntrustedCertificate");
-        void ForServer()
-        {
-            assign.Visibility = vm.CanAssign && !vm.IsGitHub ? Visibility.Visible : Visibility.Collapsed;
-            token.IsEnabled = untrusted.IsEnabled = !vm.IsGitHub;
-        }
-        vm.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(BugReportDialogViewModel.IsGitHub)) ForServer(); };
-        ForServer();
-
         return new Form()
             .Row("Screenshot:", previews, 128)
             .Row("Title:", Text("IssueTitleTextBox", "IssueTitle").Hint("What went wrong?"))
             .Row("Description:", MultiLine("DescriptionTextBox", "Description", 100).Hint("Steps to reproduce, expected and actual behavior (optional)"), 108)
             .Row(null, Horizontal(
                 Check("IncludeScreenshotsCheckBox", "Attach screenshot", "IncludeScreenshots").With(c => { c.Margin = new Thickness(0, 0, 16, 0); c.IsEnabled = vm.Images.Count > 0; }),
-                Check("IncludeLogCheckBox", "Attach log", "IncludeLog").With(c => c.Margin = new Thickness(0, 0, 16, 0)),
-                assign), 26)
-            .Row("Server:", Text("ServerUrlTextBox", "ServerUrl").WithoutAutoFocus().Hint("Forgejo or GitHub URL (empty: save only)", "Icon.Link"))
+                Check("IncludeLogCheckBox", "Attach log", "IncludeLog")), 26)
+            .Row("Server:", Text("ServerUrlTextBox", "ServerUrl").WithoutAutoFocus().Hint("GitHub or Forgejo URL (empty: save only)", "Icon.Link"))
             .Row("Repository:", Text("RepositoryTextBox", "Repository").WithoutAutoFocus().Hint("owner/repo"))
-            .Row("Token:", token)
-            // 何のための設定・表示かが分かる文言にする（#9）
-            .Row(null, untrusted, 26)
+            // 何をすればよいかが分かる文言にする（#9）
+            .Row(null, Note("Sign in to the server in the browser, drag the screenshots from the opened folder, then submit the issue."), 22)
             .Row(null, Note($"A copy is saved to {Core.Reporting.BugReport.DefaultDirectory}"), 22);
     }
 

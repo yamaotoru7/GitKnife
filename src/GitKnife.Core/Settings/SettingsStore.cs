@@ -18,7 +18,15 @@ public static class SettingsStore
 
     public static string DefaultPath => Path.Combine(ProductInfo.AppDataDirectory, "settings.json");
 
+    /// <summary>読んで、送り先をこの版（配布先）にそろえる。</summary>
     public static AppSettings Load(string? path = null)
+    {
+        var s = Read(path);
+        s.ApplyDistribution(Distribution.ServerUrl, Distribution.Repository);
+        return s;
+    }
+
+    private static AppSettings Read(string? path)
     {
         path ??= DefaultPath;
         if (!File.Exists(path)) return new AppSettings();

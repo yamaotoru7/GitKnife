@@ -23,6 +23,36 @@ public class SettingsTests : IDisposable
         Assert.Equal("Home", s.Workspaces.ActiveWorkspace);
     }
 
+    /// <summary>別の版で保存した送り先は、インストールした版の既定に戻す。同じ版で変えた送り先は残す。</summary>
+    [Fact]
+    public void DestinationsFollowInstalledEdition()
+    {
+        // 前の版の設定（Edition なし）で、開発版の送り先が残っている → GitHub 版では戻す
+        var s = new AppSettings();
+        s.BugReport.ServerUrl = "https://git.example.com/"; s.BugReport.Repository = "dev/gitknife";
+        s.Update.ServerUrl = "https://git.example.com/"; s.Update.Repository = "dev/gitknife"; s.Update.OAuthClientId = "id";
+        s.ApplyDistribution("https://github.com/", "owner/GitKnife");
+        Assert.Equal(("https://github.com/", "owner/GitKnife"), (s.BugReport.ServerUrl, s.BugReport.Repository));
+        Assert.Equal(("https://github.com/", "owner/GitKnife", ""), (s.Update.ServerUrl, s.Update.Repository, s.Update.OAuthClientId));
+        Assert.Equal("https://github.com/owner/GitKnife", s.BugReport.Edition);
+
+        // 同じ版でユーザーが変えた送り先はそのまま
+        s.BugReport.ServerUrl = "";
+        s.ApplyDistribution("https://github.com/", "owner/GitKnife");
+        Assert.Equal("", s.BugReport.ServerUrl);
+
+        // 開発版を入れ直したら開発版の既定に
+        s.ApplyDistribution("https://git.example.com/", "dev/gitknife");
+        Assert.Equal(("https://git.example.com/", "dev/gitknife"), (s.BugReport.ServerUrl, s.BugReport.Repository));
+
+        // 前の版の設定で、送り先がこの版の既定と同じなら印を付けるだけ（書き方の違いはそのまま）
+        var same = new AppSettings();
+        same.BugReport.ServerUrl = "https://git.example.com"; same.BugReport.Repository = "dev/gitknife";
+        same.ApplyDistribution("https://git.example.com/", "dev/gitknife");
+        Assert.Equal("https://git.example.com", same.BugReport.ServerUrl);
+        Assert.Equal("https://git.example.com/dev/gitknife", same.BugReport.Edition);
+    }
+
     [Fact]
     public void RoundTripsAndKeepsUnknownKeys()
     {

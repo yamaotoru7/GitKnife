@@ -125,16 +125,3 @@ internal static class BugReporter
     [DllImport("gdi32.dll")] private static extern bool DeleteObject(IntPtr obj);
     [DllImport("gdi32.dll")] private static extern bool DeleteDC(IntPtr dc);
 }
-
-/// <summary>
-/// バグレポートの送り先のトークンを Windows の資格情報マネージャーに置く（settings.json には書かない）。
-/// 名前は "GitKnife:bug-report:&lt;サーバーの URL&gt;"。
-/// </summary>
-internal static class BugReportToken
-{
-    private static string Target(string serverUrl) => $"{Core.ProductInfo.Name}:bug-report:{serverUrl.Trim().TrimEnd('/')}";
-
-    public static string? Read(string serverUrl) => serverUrl.Trim().Length == 0 ? null : CredentialStore.Read(Target(serverUrl));
-
-    public static void Write(string serverUrl, string token) => CredentialStore.Write(Target(serverUrl), token);
-}

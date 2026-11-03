@@ -133,6 +133,32 @@ public sealed class AppSettings
     public BugReportSettings BugReport { get; set; } = new();
     /// <summary>更新の確認（File > Check for Updates...、1 日 1 回）。最後に確かめた日時は LastUpdateCheck。トークンは資格情報マネージャー。</summary>
     public UpdateSettings Update { get; set; } = new();
+
+    /// <summary>
+    /// バグ報告と更新の送り先を、インストールした版（配布先）にそろえる。別の版（GitHub 版と開発版など）で保存した送り先が残っていれば、
+    /// この版の既定に戻す。同じ版の中でユーザーが変えた送り先はそのまま。Edition が空（前の版の設定）なら、送り先が既定と違うときだけ戻す。
+    /// </summary>
+    public void ApplyDistribution(string serverUrl, string repository)
+    {
+        var edition = EditionKey(serverUrl, repository);
+        bool Stale(string saved, string url, string repo) =>
+            saved.Length > 0 ? !saved.Equals(edition, StringComparison.OrdinalIgnoreCase) : !EditionKey(url, repo).Equals(edition, StringComparison.OrdinalIgnoreCase);
+        if (Stale(BugReport.Edition, BugReport.ServerUrl, BugReport.Repository))
+        {
+            BugReport.ServerUrl = serverUrl;
+            BugReport.Repository = repository;
+        }
+        BugReport.Edition = edition;
+        if (Stale(Update.Edition, Update.ServerUrl, Update.Repository))
+        {
+            Update.ServerUrl = serverUrl;
+            Update.Repository = repository;
+            Update.OAuthClientId = "";
+        }
+        Update.Edition = edition;
+    }
+
+    private static string EditionKey(string serverUrl, string repository) => $"{serverUrl.Trim().TrimEnd('/')}/{repository.Trim().Trim('/')}";
     /// <summary>
     /// 登録した SSH のホスト（T1301。Preferences > Hosts）。リポジトリは \\gitknife-ssh\&lt;Name&gt;\… で表し、git は ssh で Destination に入って動かす。
     /// WSL はパスで決まるので登録しない。
@@ -201,12 +227,8 @@ public sealed class BugReportSettings
     public string ServerUrl { get; set; } = Distribution.ServerUrl;
     /// <summary>"owner/repo"。</summary>
     public string Repository { get; set; } = Distribution.Repository;
-    /// <summary>Windows が信頼しない証明書でも送る（社内の自己署名の証明書のサーバー用。既定は無効）。</summary>
-    public bool AllowUntrustedCertificate { get; set; }
-    /// <summary>作った Issue の担当にするユーザー（Report a Bug の "Assign to …"。#8。既定は配布先の値。Forgejo のときだけ使う）。</summary>
-    public string Assignee { get; set; } = Distribution.BugReportAssignee;
-    /// <summary>"Assign to …" のチェック（前回の状態を覚える）。</summary>
-    public bool AssignIssue { get; set; } = true;
+    /// <summary>この送り先を決めた版（"サーバー/owner/repo"。<see cref="AppSettings.ApplyDistribution"/>）。</summary>
+    public string Edition { get; set; } = "";
 }
 
 public sealed class SshHostSettings
@@ -244,6 +266,8 @@ public sealed class UpdateSettings
     public string OAuthScope { get; set; } = "read:repository";
     /// <summary>起動時に 1 日 1 回確かめる。</summary>
     public bool CheckAutomatically { get; set; } = true;
+    /// <summary>この送り先を決めた版（<see cref="AppSettings.ApplyDistribution"/>）。</summary>
+    public string Edition { get; set; } = "";
 }
 
 public sealed class Workspace

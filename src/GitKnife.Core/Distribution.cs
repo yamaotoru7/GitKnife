@@ -17,10 +17,7 @@ public static class Distribution
     /// <summary>更新の API にサインインが要るサーバーの OAuth2 アプリの Client ID（空ならサインインしない）。</summary>
     public static string OAuthClientId { get; } = Get("GkOAuthClientId") ?? "";
 
-    /// <summary>バグ報告の Issue の担当（空なら "Assign to …" を出さない）。</summary>
-    public static string BugReportAssignee { get; } = Get("GkBugReportAssignee") ?? "";
-
-    /// <summary>github.com（Issue と Releases の扱いが Forgejo と違う）。</summary>
+    /// <summary>github.com（Releases の API が Forgejo と違う）。</summary>
     public static bool IsGitHub(string serverUrl) =>
         Uri.TryCreate(serverUrl.Trim(), UriKind.Absolute, out var u) && u.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase);
 

@@ -14,10 +14,9 @@ public sealed partial class BugReportImageChoice(BugReportImage image, BitmapSou
 }
 
 /// <summary>
-/// "Report a Bug"（Ctrl+Shift+F12）。撮った画面の縮小、題名、説明、ログと環境を付けるか、送り先（Forgejo か GitHub の URL・リポジトリ・トークン）。
-/// Send で %LocalAppData%\GitKnife\bug-reports\ に保存してから Issue を作り、作った Issue をブラウザで開く。
-/// GitHub なら保存してから、題名と本文を入れた New issue の画面と、画像を保存したフォルダを開く（Open in Browser）。
-/// 送り先の URL が空なら保存だけしてフォルダを開く。送れなかったときはダイアログを閉じずにフッターに理由を出す（保存したものは残る）。
+/// "Report a Bug"（Ctrl+Shift+F12）。撮った画面の縮小、題名、説明、ログと環境を付けるか、送り先（GitHub か Forgejo の URL とリポジトリ）。
+/// Open in Browser で %LocalAppData%\GitKnife\bug-reports\ に保存してから、題名と本文を入れた New issue の画面と、画像を保存したフォルダを開く。
+/// Issue は報告する人が自分のアカウントで作る（画像と log.txt はドラッグして貼る。担当も画面で選ぶ）。送り先の URL が空なら保存だけしてフォルダを開く。
 /// </summary>
 public sealed partial class BugReportDialogViewModel : DialogViewModel
 {
@@ -32,18 +31,11 @@ public sealed partial class BugReportDialogViewModel : DialogViewModel
         var s = App.Settings.BugReport;
         _serverUrl = s.ServerUrl;
         _repository = s.Repository;
-        _allowUntrustedCertificate = s.AllowUntrustedCertificate;
-        _assignIssue = s.AssignIssue;
-        try { _token = BugReportToken.Read(s.ServerUrl) ?? ""; }
-        catch (Exception ex) { Log.Warning($"Reading bug report token failed: {ex.Message}"); _token = ""; }
     }
 
     public override string Title => "Report a Bug";
-    public override string Subtitle => "The screenshot, the environment and the end of the log are attached.";
-    public override string SubmitText => ServerUrl.Trim().Length == 0 ? "Save" : IsGitHub ? "Open in Browser" : "Send";
-
-    /// <summary>送り先が GitHub（ブラウザで New issue を開く。トークン・担当・証明書の欄は使わない）。</summary>
-    public bool IsGitHub => Core.Distribution.IsGitHub(ServerUrl);
+    public override string Subtitle => "Opens a new issue in the browser with the environment and the end of the log filled in.";
+    public override string SubmitText => ServerUrl.Trim().Length == 0 ? "Save" : "Open in Browser";
     public override double DialogWidth => 640;
 
     public IReadOnlyList<BugReportImageChoice> Images { get; }
@@ -62,20 +54,11 @@ public sealed partial class BugReportDialogViewModel : DialogViewModel
         }
     }
 
-    /// <summary>"Assign to &lt;Assignee&gt;"：作った Issue の担当にする（#8）。</summary>
-    public string AssignText => $"Assign to {App.Settings.BugReport.Assignee}";
-    public bool CanAssign => App.Settings.BugReport.Assignee.Trim().Length > 0;
-    [ObservableProperty] private bool _assignIssue;
-
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(CanSubmit), nameof(CanSubmitNow))] private string _issueTitle = "";
     [ObservableProperty] private string _description = "";
     [ObservableProperty] private bool _includeLog = true;
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(SubmitText), nameof(IsGitHub))] private string _serverUrl;
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(SubmitText))] private string _serverUrl;
     [ObservableProperty] private string _repository;
-    /// <summary>PasswordBox から入れる（束縛できないので View が PasswordChanged で書く）。</summary>
-    public string Token { get => _token; set => _token = value; }
-    private string _token;
-    [ObservableProperty] private bool _allowUntrustedCertificate;
 
     public override bool CanSubmit => IssueTitle.Trim().Length > 0;
 
@@ -95,7 +78,6 @@ public sealed partial class BugReportDialogViewModel : DialogViewModel
     {
         var report = new BugReport { Title = IssueTitle.Trim(), Description = Description };
         report.Images.AddRange(Images.Where(i => i.IsSelected).Select(i => i.Image));
-        if (AssignIssue && CanAssign && !IsGitHub) report.Assignees.Add(App.Settings.BugReport.Assignee.Trim());
         var main = App.Current.MainWindow?.DataContext as MainViewModel;
         var tab = main?.SelectedTab;
         void Env(string k, string? v) { if (!string.IsNullOrEmpty(v)) report.Environment.Add(new(k, v)); }
@@ -123,16 +105,14 @@ public sealed partial class BugReportDialogViewModel : DialogViewModel
         var s = App.Settings.BugReport;
         s.ServerUrl = ServerUrl.Trim();
         s.Repository = Repository.Trim();
-        s.AllowUntrustedCertificate = AllowUntrustedCertificate;
-        s.AssignIssue = AssignIssue;
         App.SaveSettings();
-        if (s.ServerUrl.Length > 0 && Token.Trim().Length > 0)
+        if (s.ServerUrl.Length > 0)
         {
-            try { BugReportToken.Write(s.ServerUrl, Token.Trim()); }
-            catch (Exception ex) { Log.Warning($"Saving bug report token failed: {ex.Message}"); }
+            if (!Uri.TryCreate(s.ServerUrl, UriKind.Absolute, out var u) || u.Scheme is not ("https" or "http")) Fail("Server must be a URL like https://github.com/.");
+            if (s.Repository.Split('/', StringSplitOptions.RemoveEmptyEntries).Length != 2) Fail("Repository must be 'owner/repo'.");
         }
 
-        // 送り直しのときも保存は 1 回だけ
+        // もう一度押したときも保存は 1 回だけ
         _savedDirectory ??= await Task.Run(() => report.Save(), ct);
         Log.Info($"Bug report saved to {_savedDirectory}");
         if (s.ServerUrl.Length == 0)
@@ -140,33 +120,12 @@ public sealed partial class BugReportDialogViewModel : DialogViewModel
             Open(_savedDirectory);
             return;
         }
-        if (IsGitHub)
-        {
-            // トークンなしで Issue は作れないので、題名と本文を入れた New issue をブラウザで開く。画像は保存したフォルダから貼ってもらう
-            if (s.Repository.Split('/', StringSplitOptions.RemoveEmptyEntries).Length != 2) Fail("Repository must be 'owner/repo'.");
-            Log.Info($"Bug report: opening a new GitHub issue for {s.Repository}");
-            if (report.Images.Count > 0) Open(_savedDirectory);
-            Open(report.GitHubNewIssueUrl(s.ServerUrl, s.Repository));
-            return;
-        }
-        if (Token.Trim().Length == 0) Fail("Enter an access token (Forgejo > Settings > Applications, scope write:issue).");
-
-        StatusMessage = "Sending...";
-        try
-        {
-            using var handler = new System.Net.Http.HttpClientHandler();
-            if (s.AllowUntrustedCertificate) handler.ServerCertificateCustomValidationCallback = System.Net.Http.HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
-            using var client = new ForgejoIssueClient(s.ServerUrl, s.Repository, Token, handler);
-            var issue = await report.SendAsync(client, ct);
-            Log.Info($"Bug report sent: #{issue.Number} {issue.HtmlUrl}");
-            if (issue.HtmlUrl.Length > 0) Open(issue.HtmlUrl);
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-        catch (Exception ex) when (ex is System.Net.Http.HttpRequestException or ArgumentException or TaskCanceledException or InvalidOperationException or System.Text.Json.JsonException)
-        {
-            Log.Error($"Sending bug report failed: {ex}");
-            Fail($"{(ex.InnerException ?? ex).Message.Split('\n')[0]} (saved to {_savedDirectory})");
-        }
+        // 題名と本文を入れた New issue をブラウザで開く。画像と log.txt は保存したフォルダから貼ってもらう
+        Log.Info($"Bug report: opening a new issue for {s.Repository} on {s.ServerUrl}");
+        var url = report.NewIssueUrl(s.ServerUrl, s.Repository);
+        // 貼るものがあるときだけフォルダを開く（画像か、本文に入りきらなかったログ。そのときは本文が log.txt を案内する）
+        if (report.Images.Count > 0 || url.Contains(BugReport.LogFileName, StringComparison.Ordinal)) Open(_savedDirectory);
+        Open(url);
     }
 
     /// <summary>フッターに理由を出し、ダイアログは開いたままにする（DialogWindow は OperationCanceledException では閉じない）。</summary>
