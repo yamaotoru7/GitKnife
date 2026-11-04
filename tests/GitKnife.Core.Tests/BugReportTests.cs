@@ -46,7 +46,7 @@ public class BugReportTests : IDisposable
 
         var big = Sample();
         big.LogTail = string.Join("\n", Enumerable.Range(1, 200).Select(i => $"line {i:000} " + new string('x', 60)));
-        var cut = big.NewIssueUrl("https://git.example.com", "owner/gitknife", 3000);
+        var cut = big.NewIssueUrl("https://git.example.com", "owner/gitknife", maxLength: 3000);
         Assert.True(cut.Length <= 3000);
         var cutBody = Uri.UnescapeDataString(cut);
         Assert.Contains("line 200 ", cutBody);          // 新しい行は残る
@@ -54,9 +54,24 @@ public class BugReportTests : IDisposable
         Assert.Contains("of 200 lines; drag log.txt", cutBody);
 
         // ログの 1 行も入らない長さでも、log.txt の案内は出る
-        var none = Uri.UnescapeDataString(big.NewIssueUrl("https://github.com", "owner/gitknife", 100));
+        var none = Uri.UnescapeDataString(big.NewIssueUrl("https://github.com", "owner/gitknife", maxLength: 100));
         Assert.Contains("(Drag log.txt from the saved report folder for the log.)", none);
         Assert.DoesNotContain("line 200 ", none);
+    }
+
+    /// <summary>GitLab は /-/issues/new と issue[title]・issue[description]（古いパスはリダイレクトで長いクエリが 502 になる）。</summary>
+    [Fact]
+    public void NewIssueUrlForGitLab()
+    {
+        var url = Sample().NewIssueUrl("http://gitlab.example.co.jp/", "group/gitknife");
+        Assert.StartsWith("http://gitlab.example.co.jp/group/gitknife/-/issues/new?issue%5Btitle%5D=Tab%20color%20is%20lost&issue%5Bdescription%5D=", url);
+        Assert.StartsWith(BugReport.IssueMarker + "\n", Uri.UnescapeDataString(url[(url.IndexOf("%5Bdescription%5D=", StringComparison.Ordinal) + 18)..]));
+
+        Assert.True(Distribution.IsGitLab("https://gitlab.com/"));
+        Assert.False(Distribution.IsGitLab("https://github.com/"));
+        Assert.False(Distribution.IsGitLab("https://git.example.com/"));
+        Assert.Equal(("http://gitlab.example.co.jp/", "group/gitknife"),
+            Distribution.ParseRepositoryUrl("http://gitlab.example.co.jp/group/gitknife/-/issues"));
     }
 
     [Fact]

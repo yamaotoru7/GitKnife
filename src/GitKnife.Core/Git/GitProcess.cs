@@ -90,6 +90,24 @@ public sealed class GitProcess(GitExecutable git, GitHost? host = null)
 
     public async Task<GitResult> RunAsync(GitRequest request, CancellationToken ct = default)
     {
+        var result = await RunOnceAsync(request, ct).ConfigureAwait(false);
+        // GCM の OAuth で期限の切れたアクセストークンを使って失敗したときは、1 回だけやり直す（2 回目は refresh_token から取り直したトークンで通る）
+        if (!result.Succeeded && Host is LocalGitHost && OAuthRefreshRetry.ShouldRetry(result.StandardError, out var origin))
+        {
+            Log.Info($"Authentication failed for {origin} with a stored OAuth refresh token; retrying once");
+            result = await RunOnceAsync(request, ct).ConfigureAwait(false);
+        }
+        if (!result.Succeeded && CredentialDiagnostics.LooksLikeAuthFailure(result.StandardError))
+        {
+            try { await CredentialDiagnostics.LogAsync(this, request, result).ConfigureAwait(false); }
+            catch (Exception ex) { Log.Debug($"credential diagnostics failed: {ex.Message}"); }
+        }
+        Completed?.Invoke(result);
+        return result;
+    }
+
+    private async Task<GitResult> RunOnceAsync(GitRequest request, CancellationToken ct)
+    {
         // 対話を禁止し、出力を機械的に読める形に固定する
         var env = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
         {
@@ -133,7 +151,6 @@ public sealed class GitProcess(GitExecutable git, GitHost? host = null)
                     CommandLine = request.CommandLine,
                 };
                 if (!pooled.Succeeded) Log.Debug($"git exited {pooled.ExitCode}: {pooled.StandardError.Trim()}");
-                Completed?.Invoke(pooled);
                 return pooled;
             }
         }
@@ -220,12 +237,6 @@ public sealed class GitProcess(GitExecutable git, GitHost? host = null)
             CommandLine = request.CommandLine,
         };
         if (!result.Succeeded) Log.Debug($"git exited {result.ExitCode}: {stderr.Trim()}");
-        if (!result.Succeeded && CredentialDiagnostics.LooksLikeAuthFailure(stderr))
-        {
-            try { await CredentialDiagnostics.LogAsync(this, request, result).ConfigureAwait(false); }
-            catch (Exception ex) { Log.Debug($"credential diagnostics failed: {ex.Message}"); }
-        }
-        Completed?.Invoke(result);
         return result;
     }
 }

@@ -61,7 +61,7 @@ public partial class App : Application
         try { Core.Settings.RepositoryList.CreateFrom(Settings.RepositoryManager); }
         catch (System.IO.IOException ex) { Log.Warning($"Creating repositories.toml failed: {ex.Message}"); }
         ThemeManager.Apply(Settings);
-        // FollowSystemTheme のときは Windows のアプリの配色を変えたらすぐ合わせる（Preferences に項目は無く、設定ファイルのキーだけ）
+        // FollowSystemTheme のときは Windows のアプリの配色を変えたらすぐ合わせる（ツールバーの Appearance > System で選ぶ）
         SystemEvents.UserPreferenceChanged += (_, e) =>
         {
             if (e.Category == UserPreferenceCategory.General && Settings.FollowSystemTheme)
@@ -70,6 +70,8 @@ public partial class App : Application
 
         // \\gitknife-ssh\<名前>\… のリポジトリは Preferences > Hosts に登録した接続先で（T1301）
         GitHost.SshHostResolver = name => Settings.SshHosts.FirstOrDefault(h => string.Equals(h.Name, name, StringComparison.OrdinalIgnoreCase))?.ToHost();
+        // SSH の接続のパスワード・パスフレーズ・知らないホストの確認は GitKnife.AskPass から画面で聞く（T1305）
+        SshAuth.Start(Dispatcher);
         GitProcess git;
         try { git = new GitProcess(GitExecutable.Resolve(Settings.GitInstancePath)); }
         catch (Exception ex)
@@ -143,6 +145,7 @@ public partial class App : Application
         try { SettingsStore.Save(Settings); Log.Debug("Saving settings"); }
         catch (Exception ex) { Log.Error($"Saving settings failed: {ex.Message}"); }
         SshGitHost.CloseSessions();   // 常駐の ssh（T1307）
+        SshAuth.Stop();
         base.OnExit(e);
     }
 }

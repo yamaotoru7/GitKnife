@@ -1,9 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    GIT_ASKPASS／credential helper／SSH_ASKPASS として git から起動される小さな exe。
+    SSH_ASKPASS として ssh から起動される小さな exe。
     本体（GitKnife.exe）と名前付きパイプで通信して、パスワード・パスフレーズ・既知ホスト確認を仲介する。
-    起動が速いことが大事なので依存を増やさない。
+    起動が速いことが大事なので、依存は GitKnife.Core（パッケージ参照なし）だけ。
   -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -11,5 +11,9 @@
     <RootNamespace>GitKnife.AskPass</RootNamespace>
     <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\GitKnife.Core\GitKnife.Core.csproj" />
+  </ItemGroup>
 
 </Project>

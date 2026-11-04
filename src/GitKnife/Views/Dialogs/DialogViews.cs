@@ -162,6 +162,13 @@ internal static class DialogViews
             .Row("Name:", Text("SshHostNameTextBox", "Name").Hint("Optional. Defaults to the host name"))
             .Row("Git:", Text("SshHostGitTextBox", "GitPath").Hint("Optional. Defaults to git on PATH"))
             .Row(null, TestHostButton(a)),
+        SshPasswordDialogViewModel s => new Form()
+            .Row(null, Note(s.PromptText), 22)
+            .Row(s.FieldLabel, PasswordField(s))
+            .Row(null, Check("RememberPasswordCheckBox", "Remember in Windows Credential Manager", "Remember"), 26, visibleWhen: "CanRemember"),
+        SshHostKeyDialogViewModel k => new Form(0) { Margin = new Thickness(20, 0, 20, 0) }
+            .Row(null, HostKeyDetails(k.Details), 84)
+            .Row(null, Note(k.NoteText), 36),
         QuickCheckoutDialogViewModel => new Form()
             .Row("Branch:", new Controls.RefPicker { Icon = Icon("Icon.Branch") }.Bind(Controls.RefPicker.ItemsProperty, "Branches").Bind(Controls.RefPicker.SelectedItemProperty, "SelectedBranch")),
         MergeResolverViewModel r => new MergeResolverView(r),
@@ -601,6 +608,36 @@ internal static class DialogViews
             (window as DialogWindow)?.Submit();
         };
         return WithSideButton(Text("RemotePathTextBox", "RepositoryPath").Hint("Folder of the repository"), browse);
+    }
+
+    /// <summary>SSH のパスワード欄（PasswordBox は束縛できないので、変わるたびに VM に入れる）。Enter で Connect。</summary>
+    private static FrameworkElement PasswordField(SshPasswordDialogViewModel vm)
+    {
+        var box = new System.Windows.Controls.PasswordBox { Height = 24 };
+        box.SetResourceReference(FrameworkElement.StyleProperty, "Gk.PasswordBox");
+        System.Windows.Automation.AutomationProperties.SetAutomationId(box, "PasswordBox");
+        box.PasswordChanged += (_, _) => vm.Password = box.Password;
+        box.Loaded += (_, _) => box.Focus();
+        box.KeyDown += (_, e) =>
+        {
+            if (e.Key != System.Windows.Input.Key.Enter) return;
+            e.Handled = true;
+            (Window.GetWindow(box) as DialogWindow)?.Submit();
+        };
+        return box;
+    }
+
+    /// <summary>知らないホストの鍵（ssh の文言と指紋。選んでコピーできる）。</summary>
+    private static FrameworkElement HostKeyDetails(string text)
+    {
+        var t = new System.Windows.Controls.TextBox
+        {
+            Text = text, IsReadOnly = true, TextWrapping = TextWrapping.Wrap, Height = 76, Padding = new Thickness(4, 2, 4, 2),
+            VerticalContentAlignment = VerticalAlignment.Top, FontFamily = new System.Windows.Media.FontFamily("Consolas"),
+        };
+        t.SetResourceReference(FrameworkElement.StyleProperty, "Gk.TextBox");
+        System.Windows.Automation.AutomationProperties.SetAutomationId(t, "HostKeyTextBox");
+        return t;
     }
 
     /// <summary>New SSH Host の Test Connection（結果はフッター）。</summary>

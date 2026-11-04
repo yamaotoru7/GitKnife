@@ -17,9 +17,15 @@ public sealed record OAuthTokens(string AccessToken, string? RefreshToken, DateT
 /// Forgejo（Gitea 互換）の OAuth2。ブラウザでログインと許可をしてもらい、ループバックで認可コードを受け取る（RFC 8252、PKCE。2026-10-29 ユーザー判断）。
 /// アプリは秘密の鍵を持たない（Forgejo のアプリ登録で Confidential client をオフ）。戻り先は "http://127.0.0.1/" で登録し、ポートは毎回空いているものを使う
 /// （Forgejo は公開クライアントのループバックの戻り先のポートを無視して照合する）。
+/// GitLab も同じ流れで、入口と出口のパスだけが違う（<see cref="ForGitLab"/>。GitLab は /oauth/authorize と /oauth/token）。
 /// </summary>
-public sealed class ForgejoOAuth(HttpClient http, string serverUrl, string clientId, string scope = "")
+public sealed class ForgejoOAuth(HttpClient http, string serverUrl, string clientId, string scope = "",
+    string authorizePath = "login/oauth/authorize", string tokenPath = "login/oauth/access_token")
 {
+    /// <summary>GitLab の OAuth2（アプリ登録は Confidential をオフ、Redirect URI は http://127.0.0.1/、スコープは read_api）。</summary>
+    public static ForgejoOAuth ForGitLab(HttpClient http, string serverUrl, string clientId, string scope) =>
+        new(http, ServerProbe.Root(serverUrl), clientId, scope, "oauth/authorize", "oauth/token");
+
     private readonly string _base = serverUrl.Trim().TrimEnd('/') + "/";
 
     /// <summary>許可を待つ長さ（ブラウザでログインする時間を含む）。</summary>
@@ -48,7 +54,7 @@ public sealed class ForgejoOAuth(HttpClient http, string serverUrl, string clien
                 "state=" + state,
             };
             if (scope.Trim().Length > 0) query.Add("scope=" + Uri.EscapeDataString(scope.Trim()));
-            openBrowser($"{_base}login/oauth/authorize?{string.Join('&', query)}");
+            openBrowser($"{_base}{authorizePath}?{string.Join('&', query)}");
 
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeout.CancelAfter(Timeout);
@@ -157,7 +163,7 @@ public sealed class ForgejoOAuth(HttpClient http, string serverUrl, string clien
     private async Task<OAuthTokens> RequestTokenAsync(Dictionary<string, string> form, CancellationToken ct)
     {
         using var content = new FormUrlEncodedContent(form);
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"{_base}login/oauth/access_token") { Content = content };
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"{_base}{tokenPath}") { Content = content };
         request.Headers.Accept.ParseAdd("application/json");
         using var r = await http.SendAsync(request, ct).ConfigureAwait(false);
         var text = await r.Content.ReadAsStringAsync(ct).ConfigureAwait(false);

@@ -392,6 +392,35 @@
         </Setter>
     </Style>
 
+    <!-- 入力欄と同じ見た目のパスワード欄（SSH の接続のパスワード） -->
+    <Style x:Key="Gk.PasswordBox" TargetType="PasswordBox">
+        <Setter Property="Foreground" Value="{DynamicResource Gk.Text}"/>
+        <Setter Property="Background" Value="{DynamicResource Gk.Input.Background}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource Gk.Input.Border}"/>
+        <Setter Property="CaretBrush" Value="{DynamicResource Gk.Text}"/>
+        <Setter Property="SelectionBrush" Value="{DynamicResource Gk.Selection}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="4,0"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="PasswordBox">
+                    <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="3">
+                        <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Gk.Accent}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.6"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- ===== リスト ===== -->
     <Style x:Key="Gk.ListBox" TargetType="ListBox">
         <Setter Property="Background" Value="Transparent"/>

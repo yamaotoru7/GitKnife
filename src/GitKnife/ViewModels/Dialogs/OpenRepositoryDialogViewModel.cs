@@ -178,12 +178,12 @@ public sealed partial class OpenRepositoryDialogViewModel : DialogViewModel
 
 /// <summary>
 /// Open Repository の New Host...：SSH のホストを足す（登録の中身は Preferences > Hosts と同じ。変更と削除はそちら）。
-/// 認証は今は鍵と ssh-agent だけ（BatchMode。T1305）なので説明に書く。Test Connection は任意で、失敗していても足せる。
+/// 認証は鍵、ssh-agent、パスワード（接続するときに聞き、資格情報マネージャーに保存できる。T1305）。Test Connection は任意で、失敗していても足せる。
 /// </summary>
 public sealed partial class AddSshHostDialogViewModel(AppSettings settings, GitExecutable git) : DialogViewModel
 {
     public override string Title => "New SSH Host";
-    public override string Subtitle => "Connects with an SSH key or ssh-agent. Passwords are not supported yet";
+    public override string Subtitle => "Connects with an SSH key, ssh-agent or a password (asked when connecting)";
     public override string SubmitText => "Add";
 
     [ObservableProperty] private string _destination = "";

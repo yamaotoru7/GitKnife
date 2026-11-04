@@ -4,7 +4,7 @@
 ; 設定（%LocalAppData%\GitKnife）はアンインストールでも消さない。
 
 #ifndef AppVersion
-  #define AppVersion "0.1.12"
+  #define AppVersion "0.1.13"
 #endif
 #ifndef PublishDir
   #define PublishDir "..\.work\publish"

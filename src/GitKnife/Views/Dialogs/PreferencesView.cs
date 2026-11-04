@@ -356,7 +356,11 @@ internal sealed class PreferencesView : UserControl
         test.Click += async (_, _) => await _vm.TestSshHostAsync();
         var status = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 0, 0), TextWrapping = TextWrapping.Wrap, MaxWidth = 260 };
         status.SetBinding(TextBlock.TextProperty, new Binding(nameof(PreferencesViewModel.SshTestStatus)));
-        detail.Row(null, Horizontal(test, status));
+        var forget = new Button { Content = "Forget Password", Padding = new Thickness(10, 2, 10, 2), Margin = new Thickness(6, 0, 0, 0), HorizontalAlignment = HorizontalAlignment.Left };
+        AutomationProperties.SetAutomationId(forget, "ForgetSshPasswordButton");
+        forget.Click += (_, _) => _vm.ForgetSshPassword();
+        detail.Row(null, Horizontal(test, forget, status));
+        detail.Row(null, Note("Passwords and key passphrases are asked when connecting, and can be saved in Windows Credential Manager."));
         fields.Children.Add(detail);
         p.Children.Add(fields);
         p.Separator();

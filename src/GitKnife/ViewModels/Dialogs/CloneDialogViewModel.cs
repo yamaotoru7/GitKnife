@@ -22,6 +22,8 @@ public sealed partial class CloneDialogViewModel : DialogViewModel
         _gitFor = gitFor;
         // 末尾に "\" を付けて出す（"D:\Proj\"）
         _parentFolder = parentFolder.Length > 0 && !Path.EndsInDirectorySeparator(parentFolder) ? parentFolder + Path.DirectorySeparatorChar : parentFolder;
+        // クリップボードにリモートの URL があれば先に入れる（名前も URL から決まる。#14）
+        Url = RemoteEditDialogViewModel.ClipboardRemoteUrl();
     }
 
     /// <summary>Test Connection を押せる（URL が空でない）。</summary>

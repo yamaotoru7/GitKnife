@@ -402,6 +402,8 @@ public sealed partial class RepositoryViewModel : ObservableObject, IRevisionDet
     partial void OnViewChanged(RepositoryView oldValue, RepositoryView newValue)
     {
         if (oldValue == RepositoryView.LocalChanges && newValue != RepositoryView.LocalChanges) SaveDraft();
+        // Local Changes に移ったらサイドバーの選択を外す（残っていると、同じブランチを押しても選択が変わらず一覧に戻れない）
+        if (newValue == RepositoryView.LocalChanges) Sidebar.SelectedItem = null;
     }
     public static RepositoryViewModel CreateManager(GitProcess git, AppSettings settings) => new(git, settings, "") { IsManager = true };
     public SidebarViewModel Sidebar { get; } = new();

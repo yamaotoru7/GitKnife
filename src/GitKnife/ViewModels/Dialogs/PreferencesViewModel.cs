@@ -214,6 +214,14 @@ public sealed partial class PreferencesViewModel : DialogViewModel
         SshTestStatus = (await SshHostEntry.TestAsync(_git.Git, e.Settings.ToHost())).Text;
     }
 
+    /// <summary>Forget Password：この接続先の保存したパスワードを消す（次に接続するときに聞き直す）。</summary>
+    public void ForgetSshPassword()
+    {
+        if (SelectedSshHost is not { } e) return;
+        SshAuth.ForgetPassword(e.Settings.ToHost().Destination);
+        SshTestStatus = "The saved password was removed";
+    }
+
     public async Task LoadWslAsync()
     {
         if (!System.IO.File.Exists(WslGitHost.WslExe)) { WslDistributions = "(WSL is not installed)"; return; }

@@ -25,6 +25,18 @@ public class DistributionTests
             "HostUrl=https://example.com/forge/dev/gitknife/releases/download/v1/x.exe"));
     }
 
+    /// <summary>GitLab：添付はパッケージの API の URL、リリースのページは /-/releases/…。グループは ServerUrl に入れる。</summary>
+    [Fact]
+    public void GitLabUsesPackageUrlOrReleasePage()
+    {
+        Assert.Equal(("http://gitlab.corp/", "dev/gitknife"), Distribution.ParseZoneIdentifier(
+            "HostUrl=http://gitlab.corp/api/v4/projects/dev%2Fgitknife/packages/generic/gitknife/0.1.12/GitKnife-0.1.12-setup.exe"));
+        Assert.Equal(("http://gitlab.corp/", "dev/gitknife"), Distribution.ParseZoneIdentifier(
+            "ReferrerUrl=http://gitlab.corp/dev/gitknife/-/releases/v0.1.12\nHostUrl=http://gitlab.corp/x"));
+        Assert.Equal(("http://gitlab.corp/group/", "dev/gitknife"), Distribution.ParseZoneIdentifier(
+            "HostUrl=http://gitlab.corp/api/v4/projects/group%2Fdev%2Fgitknife/packages/generic/gitknife/1/x.exe"));
+    }
+
     /// <summary>ユーザーが入れるリポジトリの URL（更新とバグ報告で共通）。</summary>
     [Theory]
     [InlineData("https://github.com/owner/GitKnife", "https://github.com/", "owner/GitKnife")]

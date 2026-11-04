@@ -106,11 +106,20 @@ internal static class ToolbarMenus
         }
     }
 
-    /// <summary>Appearance：Theme（見出し）、Light、Dark、---、Commit List Layout（見出し）、Horizontal、Vertical。</summary>
+    /// <summary>Appearance：Theme（見出し）、System、Light、Dark、---、Commit List Layout（見出し）、Horizontal、Vertical。</summary>
     public static ContextMenu Appearance(Action<int> setOrientation)
     {
         var m = new ContextMenu();
         m.Items.Add(new MenuItem { Header = "Theme", IsEnabled = false });
+        // System は Windows のアプリの配色に合わせる（FollowSystemTheme）。Light／Dark を選ぶとそのテーマに固定する
+        var system = Add(m, "System", () =>
+        {
+            App.Settings.FollowSystemTheme = true;
+            ThemeManager.Apply(App.Settings);
+        });
+        system.IsCheckable = false;
+        system.IsChecked = App.Settings.FollowSystemTheme;
+        System.Windows.Automation.AutomationProperties.SetAutomationId(system, "ThemeSystemMenuItem");
         foreach (var (name, dark) in new[] { ("Light", false), ("Dark", true) })
         {
             var item = Add(m, name, () =>
@@ -120,7 +129,7 @@ internal static class ToolbarMenus
                 ThemeManager.Apply(App.Settings);
             });
             item.IsCheckable = false;
-            item.IsChecked = ThemeManager.IsDark == dark;
+            item.IsChecked = !App.Settings.FollowSystemTheme && ThemeManager.IsDark == dark;
         }
         m.Items.Add(new Separator());
         m.Items.Add(new MenuItem { Header = "Commit List Layout", IsEnabled = false });
@@ -130,12 +139,13 @@ internal static class ToolbarMenus
         return m;
     }
 
-    /// <summary>Workspaces："Workspaces"（見出し）、ワークスペースの名前（選ぶと切り替え）、---、Configure...</summary>
+    /// <summary>Workspaces："Workspaces"（見出し）、ワークスペースの名前（選ぶと切り替え。ドラッグで並べ替え）、---、Configure...</summary>
     public static ContextMenu Workspaces(MainViewModel vm)
     {
         var m = new ContextMenu();
         m.Items.Add(new MenuItem { Header = "Workspaces", IsEnabled = false });
         AddWorkspaces(m, vm, name => _ = vm.SwitchWorkspaceAsync(name));
+        WorkspaceMenuDrag.Attach(m, vm);
         m.Items.Add(new Separator());
         Add(m, "Configure...", () =>
         {
@@ -187,15 +197,14 @@ internal static class ToolbarMenus
         var folders = new Dictionary<string, MenuItem>(StringComparer.Ordinal);
         foreach (var name in vm.Settings.Workspaces.All.Select(w => w.Name).DefaultIfEmpty(active).Distinct())
         {
-            var parts = name.Split('/', StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length == 0) parts = [name];
+            var parts = Core.Settings.WorkspaceOrder.Parts(name);
             ItemsControl host = parent;
             for (var i = 0; i < parts.Length - 1; i++)
             {
                 var key = string.Join('/', parts[..(i + 1)]);
                 if (!folders.TryGetValue(key, out var folder))
                 {
-                    folder = new MenuItem { Header = new AccessText { Text = parts[i].Replace("_", "__") } };
+                    folder = new MenuItem { Header = new AccessText { Text = parts[i].Replace("_", "__") }, Tag = Core.Settings.WorkspaceOrder.FolderKey(parts, i + 1) };
                     System.Windows.Automation.AutomationProperties.SetName(folder, parts[i]);
                     host.Items.Add(folder);
                     folders[key] = folder;
@@ -206,6 +215,7 @@ internal static class ToolbarMenus
             var n = name;
             var item = Add(host, parts[^1], () => action(n));
             item.IsChecked = n == active;
+            item.Tag = n;  // 並べ替えのキー（WorkspaceMenuDrag）
         }
     }
 

@@ -59,7 +59,21 @@ public partial class SidebarView : UserControl
     /// <summary>"Show all tags (N)" / "Show less" の行を押したら、すべて出すか省略に戻す。</summary>
     private void Tree_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
-        if ((e.OriginalSource as FrameworkElement)?.DataContext is SidebarItem { Kind: SidebarItemKind.ShowMore }) Vm?.Sidebar.ToggleAllTags();
+        var item = (e.OriginalSource as FrameworkElement)?.DataContext as SidebarItem;
+        var reclicked = item is not null && ReferenceEquals(item, _pressedSelected);
+        _pressedSelected = null;
+        if (item is { Kind: SidebarItemKind.ShowMore }) Vm?.Sidebar.ToggleAllTags();
+        // 選ばれたままの行をもう一度押したとき（Local Changes や別のコミットを見ている間）も、一覧をそのコミットへ動かす
+        else if (reclicked && Keyboard.Modifiers == ModifierKeys.None && Tree.SelectedItems.Count == 1) Vm?.Sidebar.Renavigate(item!);
+    }
+
+    /// <summary>押した時点で、その行が 1 つだけ選ばれていた（押しても選択が変わらない）。</summary>
+    private SidebarItem? _pressedSelected;
+
+    private void Tree_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        var item = (e.OriginalSource as FrameworkElement)?.DataContext as SidebarItem;
+        _pressedSelected = item is not null && e.ClickCount == 1 && Tree.SelectedItems.Count == 1 && ReferenceEquals(Tree.SelectedItem, item) ? item : null;
     }
 
     private void Tree_MouseDoubleClick(object sender, MouseButtonEventArgs e)

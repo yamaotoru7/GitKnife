@@ -1,0 +1,2 @@
+# Byte-exact test fixtures: keep LF on checkout regardless of core.autocrlf
+tests/GitKnife.Core.Tests/Data/*.json eol=lf

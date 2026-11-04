@@ -9,7 +9,7 @@ namespace GitKnife.Core.Update;
 
 public sealed record ReleaseAsset(string Name, long Size, string DownloadUrl);
 
-/// <summary>Forgejo か GitHub のリリース 1 件。タグ "v0.1.1" を版として読む。</summary>
+/// <summary>Forgejo、GitHub、GitLab のリリース 1 件。タグ "v0.1.1" を版として読む。</summary>
 public sealed record ReleaseInfo(string TagName, string Name, string Body, string HtmlUrl, IReadOnlyList<ReleaseAsset> Assets)
 {
     public Version? Version => UpdateVersion.Parse(TagName);
@@ -79,7 +79,8 @@ public interface ITokenStore
 }
 
 /// <summary>
-/// 更新の確認とダウンロード（Forgejo か GitHub のリリースにある Inno Setup のインストーラ）。
+/// 更新の確認とダウンロード（Forgejo、GitHub、GitLab のリリースにある Inno Setup のインストーラ）。
+/// GitLab のリリースはファイルを持たず、Assets のリンク（Generic Package Registry の URL など）を添付として扱う。
 /// clientId があれば OAuth2 のトークンを付けて呼ぶ（サインインした人にしか API を見せない Forgejo 用）。
 /// 期限切れなら refresh token で取り直し、それもだめなら（対話できるときだけ）ブラウザでサインインしてもらう。
 /// clientId が空か GitHub なら、サインインせずに読む。Forgejo がサインインを求めたら（401、403、リポジトリが見えない）
@@ -94,10 +95,12 @@ public sealed class UpdateClient : IDisposable
     private readonly string _repoApi;
     private readonly ForgejoOAuth? _oauth;
     private readonly ITokenStore _store;
-    /// <summary>サインインせずに読む Forgejo（サインインを求められたら Client ID が要ると知らせる）。</summary>
+    /// <summary>サインインせずに読む Forgejo か GitLab（サインインを求められたら Client ID が要ると知らせる）。</summary>
     private readonly bool _anonymousForgejo;
+    private readonly bool _gitLab;
 
-    public UpdateClient(string serverUrl, string repository, string clientId, string scope, ITokenStore store, HttpMessageHandler? handler = null)
+    /// <param name="kind">サーバーの種類（<see cref="ServerProbe"/>）。Unknown ならホスト名で推測する。</param>
+    public UpdateClient(string serverUrl, string repository, string clientId, string scope, ITokenStore store, HttpMessageHandler? handler = null, ServerKind kind = ServerKind.Unknown)
     {
         var parts = repository.Trim().Trim('/').Split('/');
         if (parts.Length != 2 || parts.Any(p => p.Length == 0)) throw new ArgumentException($"Repository must be 'owner/repo': '{repository}'");
@@ -105,10 +108,24 @@ public sealed class UpdateClient : IDisposable
         _http.Timeout = Timeout.InfiniteTimeSpan;   // ダウンロードが長い。個々の呼び出しは ct で切る
         _http.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue(ProductInfo.Name, ProductInfo.Version));
         var repo = $"{Uri.EscapeDataString(parts[0])}/{Uri.EscapeDataString(parts[1])}";
-        if (Distribution.IsGitHub(serverUrl))
+        kind = kind.OrGuess(serverUrl);
+        if (kind == ServerKind.GitHub)
         {
             _repoApi = $"https://api.github.com/repos/{repo}";
             _http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
+        }
+        else if (kind == ServerKind.GitLab)
+        {
+            // API はサーバーの根にあり、プロジェクトはグループを含むパス全体を 1 つにエスケープして指す
+            _gitLab = true;
+            var root = ServerProbe.Root(serverUrl);
+            var server = serverUrl.Trim().TrimEnd('/') + "/";
+            var prefix = server.Length > root.Length ? server[root.Length..] : "";
+            _repoApi = $"{root}api/v4/projects/{Uri.EscapeDataString(prefix + parts[0] + "/" + parts[1])}";
+            // 設定の既定のスコープは Forgejo のもの。GitLab ではリリースとパッケージを読む read_api にする
+            var gitLabScope = scope.Trim() is "" or "read:repository" ? "read_api" : scope;
+            if (!string.IsNullOrWhiteSpace(clientId)) _oauth = ForgejoOAuth.ForGitLab(_http, serverUrl, clientId.Trim(), gitLabScope);
+            else _anonymousForgejo = true;
         }
         else
         {
@@ -123,10 +140,12 @@ public sealed class UpdateClient : IDisposable
     /// <param name="openBrowser">null なら対話しない（サインインが要れば SignInRequiredException）。</param>
     public async Task<ReleaseInfo?> GetLatestReleaseAsync(Action<string>? openBrowser, CancellationToken ct = default)
     {
-        using var r = await SendAuthorizedAsync(() => new HttpRequestMessage(HttpMethod.Get, $"{_repoApi}/releases/latest"), openBrowser, ct).ConfigureAwait(false);
+        // GitLab には「最新」を返す API が無い（permalink/latest はリダイレクトで、付けたトークンが落ちる）ので、新しい順の一覧の先頭を使う
+        var url = _gitLab ? $"{_repoApi}/releases?per_page=20" : $"{_repoApi}/releases/latest";
+        using var r = await SendAuthorizedAsync(() => new HttpRequestMessage(HttpMethod.Get, url), openBrowser, ct).ConfigureAwait(false);
         if (r.StatusCode == HttpStatusCode.NotFound)
         {
-            // リリースが無いのか、非公開でリポジトリが見えないのか（Forgejo は見えないリポジトリにも 404 を返す）
+            // リリースが無いのか、非公開でリポジトリが見えないのか（Forgejo と GitLab は見えないリポジトリにも 404 を返す）
             if (_anonymousForgejo)
             {
                 using var repo = await SendAuthorizedAsync(() => new HttpRequestMessage(HttpMethod.Get, _repoApi), null, ct).ConfigureAwait(false);
@@ -135,6 +154,7 @@ public sealed class UpdateClient : IDisposable
             return null;
         }
         await EnsureSuccessAsync(r, "Reading the latest release", ct).ConfigureAwait(false);
+        if (_gitLab) return (await ReadPageAsync(r, ct).ConfigureAwait(false)).Releases.FirstOrDefault();
         var dto = await r.Content.ReadFromJsonAsync<ReleaseDto>(ct).ConfigureAwait(false) ?? throw new InvalidOperationException("Empty response");
         return ToReleaseInfo(dto);
     }
@@ -147,14 +167,30 @@ public sealed class UpdateClient : IDisposable
         {
             using var r = await SendAuthorizedAsync(() => new HttpRequestMessage(HttpMethod.Get, $"{_repoApi}/releases?limit=50&per_page=50&page={page}"), null, ct).ConfigureAwait(false);
             await EnsureSuccessAsync(r, "Reading the releases", ct).ConfigureAwait(false);
-            var items = await r.Content.ReadFromJsonAsync<List<ReleaseDto>>(ct).ConfigureAwait(false) ?? [];
-            if (items.Count == 0) break;
-            var releases = items.Where(d => !d.Draft && !d.Prerelease).Select(ToReleaseInfo).ToList();
+            var (count, releases) = await ReadPageAsync(r, ct).ConfigureAwait(false);
+            if (count == 0) break;
             found.AddRange(releases.Where(x => UpdateVersion.IsNewer(x, currentVersion)));
             if (releases.Any(x => x.Version is not null && !UpdateVersion.IsNewer(x, currentVersion))) break;
         }
         return found;
     }
+
+    /// <summary>リリースの一覧の 1 ページ（件数と、下書き・プレリリース・GitLab の予定のリリースを除いたもの）。</summary>
+    private async Task<(int Count, List<ReleaseInfo> Releases)> ReadPageAsync(HttpResponseMessage r, CancellationToken ct)
+    {
+        if (_gitLab)
+        {
+            var items = await r.Content.ReadFromJsonAsync<List<GitLabReleaseDto>>(ct).ConfigureAwait(false) ?? [];
+            return (items.Count, items.Where(d => !d.UpcomingRelease).Select(ToReleaseInfo).ToList());
+        }
+        var dtos = await r.Content.ReadFromJsonAsync<List<ReleaseDto>>(ct).ConfigureAwait(false) ?? [];
+        return (dtos.Count, dtos.Where(d => !d.Draft && !d.Prerelease).Select(ToReleaseInfo).ToList());
+    }
+
+    /// <summary>GitLab のリリース。本文は description、ページは _links.self、添付は assets.links（大きさは無い）。</summary>
+    private static ReleaseInfo ToReleaseInfo(GitLabReleaseDto dto) =>
+        new(dto.TagName ?? "", dto.Name ?? "", dto.Description ?? "", dto.Links?.Self ?? "",
+            (dto.Assets?.Links ?? []).Select(a => new ReleaseAsset(a.Name ?? "", 0, a.Url ?? a.DirectAssetUrl ?? "")).ToList());
 
     private static ReleaseInfo ToReleaseInfo(ReleaseDto dto) =>
         new(dto.TagName ?? "", dto.Name ?? "", dto.Body ?? "", dto.HtmlUrl ?? "",
@@ -277,6 +313,33 @@ public sealed class UpdateClient : IDisposable
         [JsonPropertyName("draft")] public bool Draft { get; set; }
         [JsonPropertyName("prerelease")] public bool Prerelease { get; set; }
         [JsonPropertyName("assets")] public List<AssetDto>? Assets { get; set; }
+    }
+
+    private sealed class GitLabReleaseDto
+    {
+        [JsonPropertyName("tag_name")] public string? TagName { get; set; }
+        [JsonPropertyName("name")] public string? Name { get; set; }
+        [JsonPropertyName("description")] public string? Description { get; set; }
+        [JsonPropertyName("upcoming_release")] public bool UpcomingRelease { get; set; }
+        [JsonPropertyName("_links")] public GitLabLinksDto? Links { get; set; }
+        [JsonPropertyName("assets")] public GitLabAssetsDto? Assets { get; set; }
+    }
+
+    private sealed class GitLabLinksDto
+    {
+        [JsonPropertyName("self")] public string? Self { get; set; }
+    }
+
+    private sealed class GitLabAssetsDto
+    {
+        [JsonPropertyName("links")] public List<GitLabLinkDto>? Links { get; set; }
+    }
+
+    private sealed class GitLabLinkDto
+    {
+        [JsonPropertyName("name")] public string? Name { get; set; }
+        [JsonPropertyName("url")] public string? Url { get; set; }
+        [JsonPropertyName("direct_asset_url")] public string? DirectAssetUrl { get; set; }
     }
 
     private sealed class AssetDto

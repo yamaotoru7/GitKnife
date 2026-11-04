@@ -106,6 +106,77 @@ public class UpdateTests : IDisposable
         Assert.Equal(["https://forge.example/api/v1/repos/owner/gitknife/releases/latest", "https://forge.example/api/v1/repos/owner/gitknife"], server.Requests);
     }
 
+    /// <summary>
+    /// GitLab：最新はリリースの一覧（新しい順）の先頭で、予定のリリースは除く。本文は description、添付は assets.links。
+    /// プロジェクトはグループを含むパスを 1 つにエスケープして指し、API はサーバーの根にある。
+    /// </summary>
+    [Fact]
+    public async Task GitLabReadsReleaseListAndLinks()
+    {
+        var server = new FakeGitLab();
+        using var client = new UpdateClient("http://gitlab.example/group/", "sub/gitknife", "", "", new MemoryStore(), server, ServerKind.GitLab);
+        var latest = await client.GetLatestReleaseAsync(openBrowser: null);
+
+        Assert.Equal(["http://gitlab.example/api/v4/projects/group%2Fsub%2Fgitknife/releases?per_page=20"], server.Requests);
+        Assert.Null(server.LastAuthorization);
+        Assert.NotNull(latest);
+        Assert.Equal("v0.2.0", latest.TagName);
+        Assert.Equal("notes 0.2.0", latest.Body);
+        Assert.Equal("http://gitlab.example/group/sub/gitknife/-/releases/v0.2.0", latest.HtmlUrl);
+        Assert.Equal("http://gitlab.example/api/v4/projects/1/packages/generic/gitknife/0.2.0/GitKnife-0.2.0-setup.exe", latest.Installer?.DownloadUrl);
+        Assert.NotNull(latest.ChecksumFor(latest.Installer!));
+
+        var since = await client.GetReleasesSinceAsync("0.1.0");
+        Assert.Equal(["v0.2.0", "v0.1.1"], since.Select(r => r.TagName));
+    }
+
+    /// <summary>GitLab が見せない（401、非公開で 404）なら、Client ID が要ると知らせる。</summary>
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized, HttpStatusCode.Unauthorized)]
+    [InlineData(HttpStatusCode.NotFound, HttpStatusCode.NotFound)]
+    public async Task GitLabAskingForSignInNeedsClientId(HttpStatusCode releases, HttpStatusCode project)
+    {
+        var server = new FakeGitLab { Releases = releases, Project = project };
+        using var client = new UpdateClient("http://gitlab.example/", "owner/gitknife", "", "", new MemoryStore(), server, ServerKind.GitLab);
+        var ex = await Assert.ThrowsAsync<SignInRequiredException>(() => client.GetLatestReleaseAsync(openBrowser: _ => { }));
+        Assert.True(ex.NeedsClientId);
+    }
+
+    /// <summary>GitLab のサインインは /oauth/authorize（スコープは read_api）。</summary>
+    [Fact]
+    public async Task GitLabSignInUsesGitLabEndpoints()
+    {
+        var server = new FakeGitLab { Releases = HttpStatusCode.Unauthorized };
+        using var client = new UpdateClient("http://gitlab.example/", "owner/gitknife", "client-1", "read:repository", new MemoryStore(), server, ServerKind.GitLab);
+        string? opened = null;
+        using var cts = new CancellationTokenSource();
+        var task = client.GetLatestReleaseAsync(url => { opened = url; cts.Cancel(); }, cts.Token);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => task);
+        Assert.StartsWith("http://gitlab.example/oauth/authorize?client_id=client-1&", opened);
+        Assert.Contains("&scope=read_api", opened);
+    }
+
+    private sealed class FakeGitLab : HttpMessageHandler
+    {
+        public List<string> Requests { get; } = [];
+        public string? LastAuthorization { get; private set; }
+        public HttpStatusCode Releases { get; init; } = HttpStatusCode.OK;
+        public HttpStatusCode Project { get; init; } = HttpStatusCode.OK;
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            var url = request.RequestUri!.ToString();
+            Requests.Add(url);
+            LastAuthorization = request.Headers.Authorization?.ToString();
+            var status = url.Contains("/releases") ? Releases : Project;
+            if (status != HttpStatusCode.OK) return Task.FromResult(new HttpResponseMessage(status) { Content = new StringContent("""{"message":"x"}""") });
+            static string Release(string v, bool upcoming = false) =>
+                $$$"""{"tag_name":"v{{{v}}}","name":"GitKnife {{{v}}}","description":"notes {{{v}}}","upcoming_release":{{{(upcoming ? "true" : "false")}}},"_links":{"self":"http://gitlab.example/group/sub/gitknife/-/releases/v{{{v}}}"},"assets":{"links":[{"name":"GitKnife-{{{v}}}-setup.exe","url":"http://gitlab.example/api/v4/projects/1/packages/generic/gitknife/{{{v}}}/GitKnife-{{{v}}}-setup.exe"},{"name":"GitKnife-{{{v}}}-setup.exe.sha256","url":"http://gitlab.example/x.sha256"}]}}""";
+            var body = url.Contains("&page=2") ? "[]" : $"[{Release("0.3.0", upcoming: true)},{Release("0.2.0")},{Release("0.1.1")},{Release("0.1.0")}]";
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") });
+        }
+    }
+
     /// <summary>どの URL にも同じリリースを返す（認証を求めない）。Latest / Repo で /releases/latest とリポジトリの応答を変えられる。</summary>
     private sealed class FakeGitHub : HttpMessageHandler
     {

@@ -197,7 +197,7 @@
         <!-- 参照ツリー（1 本のリストに平らに並べる） -->
         <ListBox Grid.Row="4" x:Name="Tree" AutomationProperties.AutomationId="SidebarTreeView" Style="{StaticResource Gk.ListBox}" Visibility="{Binding SidebarTab, Converter={StaticResource Gk.EnumToCollapsed}, ConverterParameter=Branches}"
                  ItemsSource="{Binding Sidebar.Rows}" SelectedItem="{Binding Sidebar.SelectedItem}" ItemContainerStyle="{StaticResource Gk.SidebarRow}" SelectionMode="Extended"
-                 MouseDoubleClick="Tree_MouseDoubleClick" PreviewMouseLeftButtonUp="Tree_PreviewMouseLeftButtonUp" ContextMenuOpening="Tree_ContextMenuOpening" KeyDown="Tree_KeyDown" SelectionChanged="Tree_SelectionChanged">
+                 MouseDoubleClick="Tree_MouseDoubleClick" PreviewMouseLeftButtonDown="Tree_PreviewMouseLeftButtonDown" PreviewMouseLeftButtonUp="Tree_PreviewMouseLeftButtonUp" ContextMenuOpening="Tree_ContextMenuOpening" KeyDown="Tree_KeyDown" SelectionChanged="Tree_SelectionChanged">
             <ListBox.ContextMenu>
                 <ContextMenu/>
             </ListBox.ContextMenu>

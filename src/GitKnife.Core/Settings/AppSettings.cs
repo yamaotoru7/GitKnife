@@ -133,6 +133,16 @@ public sealed class AppSettings
     public BugReportSettings BugReport { get; set; } = new();
     /// <summary>更新の確認（File > Check for Updates...、1 日 1 回）。最後に確かめた日時は LastUpdateCheck。トークンは資格情報マネージャー。</summary>
     public UpdateSettings Update { get; set; } = new();
+    /// <summary>送り先のサーバーの種類（"http://host" → "GitLab" など。<see cref="ServerProbe"/> で初めて使うときに判定して覚える）。</summary>
+    public Dictionary<string, string> ServerKinds { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    private static string ServerKey(string serverUrl) => serverUrl.Trim().TrimEnd('/').ToLowerInvariant();
+
+    /// <summary>覚えているサーバーの種類（判定していなければ null）。</summary>
+    public ServerKind? GetServerKind(string serverUrl) =>
+        ServerKinds.TryGetValue(ServerKey(serverUrl), out var s) && Enum.TryParse<ServerKind>(s, out var k) ? k : null;
+
+    public void SetServerKind(string serverUrl, ServerKind kind) => ServerKinds[ServerKey(serverUrl)] = kind.ToString();
 
     /// <summary>
     /// バグ報告と更新の送り先を、インストールした版（配布先）にそろえる。別の版（GitHub 版と開発版など）で保存した送り先が残っていれば、

@@ -94,13 +94,18 @@ public sealed class BugReport
 
     /// <summary>
     /// New issue の画面の URL（題名と本文を入れておく。GitHub と Forgejo は同じ形）。画像は保存したフォルダから貼ってもらう。
+    /// GitLab は /-/issues/new で、題名と本文は issue[title] と issue[description]（/issues/new は /-/ 付きへリダイレクトされ、
+    /// そのとき長いクエリが Location に入ってサーバーの前段が 502 を返すことがある）。
     /// 長すぎるときは、ログを新しい側から入るだけ載せ、残りは保存したフォルダの log.txt を貼ってもらう。
     /// </summary>
-    public string NewIssueUrl(string serverUrl, string repository, int maxLength = MaxGitHubUrlLength)
+    /// <param name="kind">サーバーの種類（<see cref="ServerProbe"/>）。Unknown ならホスト名で推測する。</param>
+    public string NewIssueUrl(string serverUrl, string repository, ServerKind kind = ServerKind.Unknown, int maxLength = MaxGitHubUrlLength)
     {
-        var baseUrl = $"{serverUrl.Trim().TrimEnd('/')}/{repository.Trim().Trim('/')}/issues/new";
+        var gitLab = kind.OrGuess(serverUrl) == ServerKind.GitLab;
+        var baseUrl = $"{serverUrl.Trim().TrimEnd('/')}/{repository.Trim().Trim('/')}/{(gitLab ? "-/" : "")}issues/new";
+        var (titleKey, bodyKey) = gitLab ? ("issue%5Btitle%5D", "issue%5Bdescription%5D") : ("title", "body");
         var note = IssueMarker + "\n" + (Images.Count > 0 ? $"<!-- Drag the screenshots ({string.Join(", ", Images.Select(i => i.FileName))}) from the saved report folder here. -->\n" : "") + "\n";
-        string Make(string body) => $"{baseUrl}?title={Uri.EscapeDataString(Title)}&body={Uri.EscapeDataString(note + body)}";
+        string Make(string body) => $"{baseUrl}?{titleKey}={Uri.EscapeDataString(Title)}&{bodyKey}={Uri.EscapeDataString(note + body)}";
         var url = Make(ToMarkdown([]));
         if (url.Length <= maxLength || LogTail is not { Length: > 0 }) return url;
 

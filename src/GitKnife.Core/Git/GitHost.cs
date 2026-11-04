@@ -144,7 +144,7 @@ public sealed partial record WslGitHost(string Distribution) : GitHost
 }
 
 /// <summary>
-/// SSH の接続先（T1301）。git は <c>ssh -T -o BatchMode=yes &lt;接続先&gt; "cd '&lt;dir&gt;' &amp;&amp; env K=V … git '&lt;引数&gt;' …"</c> で起動する。
+/// SSH の接続先（T1301）。git は <c>ssh -T &lt;接続先&gt; "cd '&lt;dir&gt;' &amp;&amp; env K=V … git '&lt;引数&gt;' …"</c> で起動する。
 /// Windows 側ではリポジトリを \\gitknife-ssh\&lt;Name&gt;\home\… の形で表す（タブやワークスペースの保存、Path の操作がそのまま使える）。
 /// このパスはファイルとしては開けないので、リポジトリの中のファイルは接続先を通して読む（T1303）。
 /// Destination は ssh に渡す接続先（"user@host"、~/.ssh/config の Host 名など）、GitPath は接続先の git。
@@ -201,10 +201,8 @@ public sealed partial record SshGitHost(string Name, string Destination, string 
 
     public override System.Diagnostics.ProcessStartInfo CreateStartInfo(GitExecutable git, GitRequest request, IReadOnlyDictionary<string, string?> env)
     {
-        var psi = new System.Diagnostics.ProcessStartInfo(SshExe) { WorkingDirectory = Environment.SystemDirectory };
-        // BatchMode：パスワードや known_hosts の確認で止まらない（認証は鍵と ssh-agent。対話の認証は T1305）
-        foreach (var a in new[] { "-T", "-o", "BatchMode=yes", Destination, RemoteCommand(request.WorkingDirectory, request.Arguments, env) }) psi.ArgumentList.Add(a);
-        return psi;
+        // パスワード・パスフレーズ・既知ホストの確認は GitKnife.AskPass が本体に聞く。AskPass が無ければ BatchMode（鍵と ssh-agent だけ）
+        return SshAskPass.StartInfo(Destination, [], [RemoteCommand(request.WorkingDirectory, request.Arguments, env)]);
     }
 }
 

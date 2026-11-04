@@ -13,7 +13,7 @@ using GitKnife.Views;
 namespace GitKnife;
 
 /// <summary>
-/// 更新（配布先の Forgejo か GitHub のリリースから入れる。サインインが要るサーバーはブラウザで認証）。
+/// 更新（配布先の Forgejo、GitHub、GitLab のリリースから入れる。サーバーの種類は初めて確かめるときに判定して覚える。サインインが要るサーバーはブラウザで認証）。
 /// - File > Check for Updates...：必要ならブラウザでサインインしてもらい、新しい版があれば "Update Available" を出す。
 ///   サーバーがサインインを求めているのに OAuth2 の Client ID が無ければ（インストーラに組み込まないので最初の 1 回）入れてもらう。
 /// - 起動時：インストールした GitKnife で、前の確認から 1 日たっていれば、ブラウザを開かずに確かめる（トークンが無ければログに書いて何もしない）。
@@ -95,7 +95,8 @@ internal static class Updater
         {
             var s = App.Settings.Update;
             Log.Info($"Checking for updates ({s.ServerUrl.Trim().TrimEnd('/')}/{s.Repository}, current {ProductInfo.Version}{(interactive ? "" : ", automatic")})");
-            using var client = new UpdateClient(s.ServerUrl, s.Repository, s.OAuthClientId, s.OAuthScope, new TokenStore(s));
+            var kind = await ServerKinds.ResolveAsync(s.ServerUrl, cts.Token);
+            using var client = new UpdateClient(s.ServerUrl, s.Repository, s.OAuthClientId, s.OAuthScope, new TokenStore(s), kind: kind);
             ReleaseInfo? latest;
             try { latest = await client.GetLatestReleaseAsync(interactive ? OpenBrowser : null, cts.Token); }
             catch (SignInRequiredException ex)

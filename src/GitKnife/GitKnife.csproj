@@ -26,6 +26,8 @@
     <ProjectReference Include="..\GitKnife.Core\GitKnife.Core.csproj" />
     <!-- Interactive Rebase のエディタ役。GitKnife.exe と同じフォルダに GitKnife.RI.exe を置く -->
     <ProjectReference Include="..\GitKnife.RI\GitKnife.RI.csproj" />
+    <!-- SSH の接続のパスワード・パスフレーズ・既知ホストの確認（SSH_ASKPASS）。GitKnife.exe と同じフォルダに GitKnife.AskPass.exe を置く -->
+    <ProjectReference Include="..\GitKnife.AskPass\GitKnife.AskPass.csproj" />
   </ItemGroup>
 
   <!--

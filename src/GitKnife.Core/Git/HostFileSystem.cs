@@ -160,12 +160,7 @@ public sealed partial record SshGitHost
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, RemoteShellPool> s_pools = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>この接続先の常駐のシェル（`ssh -T … sh`。接続先ごとに最大 4 本。T1307）。</summary>
-    public RemoteShellPool Pool => s_pools.GetOrAdd(Destination, _ => new RemoteShellPool(() =>
-    {
-        var psi = new ProcessStartInfo(SshExe) { WorkingDirectory = Environment.SystemDirectory };
-        foreach (var a in new[] { "-T", "-o", "BatchMode=yes", "-o", "ServerAliveInterval=30", Destination, "sh" }) psi.ArgumentList.Add(a);
-        return psi;
-    }));
+    public RemoteShellPool Pool => s_pools.GetOrAdd(Destination, _ => new RemoteShellPool(() => SshAskPass.StartInfo(Destination, ["-o", "ServerAliveInterval=30"], ["sh"])));
 
     /// <summary>常駐のシェルを全部閉じる（アプリの終了時）。</summary>
     public static void CloseSessions()
@@ -178,25 +173,24 @@ public sealed partial record SshGitHost
     public ShellResult Shell(string command, byte[]? input = null)
     {
         Logging.Log.Debug($"ssh {Destination} {command}");
-        try { return Task.Run(() => Pool.RunAsync(command, input)).GetAwaiter().GetResult(); }
+        // 待つ間に AskPass の質問を出せるようにする（UI のスレッドから呼ばれることがある）
+        try { return SshAskPass.Wait(Task.Run(() => Pool.RunAsync(command, input))); }
         catch (IOException ex) { Logging.Log.Warning($"remote shell failed, falling back to one ssh: {ex.Message}"); }
         return ShellOnce(command, input);
     }
 
     /// <summary>ssh を 1 回張ってコマンドを動かす。</summary>
-    public ShellResult ShellOnce(string command, byte[]? input = null)
+    public ShellResult ShellOnce(string command, byte[]? input = null) => SshAskPass.Wait(Task.Run(() => RunOnce(command, input)));
+
+    private ShellResult RunOnce(string command, byte[]? input)
     {
-        var psi = new ProcessStartInfo(SshExe)
-        {
-            WorkingDirectory = Environment.SystemDirectory,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            StandardErrorEncoding = new UTF8Encoding(false),
-        };
-        foreach (var a in new[] { "-T", "-o", "BatchMode=yes", Destination, command }) psi.ArgumentList.Add(a);
+        var psi = SshAskPass.StartInfo(Destination, [], [command]);
+        psi.UseShellExecute = false;
+        psi.CreateNoWindow = true;
+        psi.RedirectStandardInput = true;
+        psi.RedirectStandardOutput = true;
+        psi.RedirectStandardError = true;
+        psi.StandardErrorEncoding = new UTF8Encoding(false);
         using var p = Process.Start(psi)!;
         var stdin = Task.Run(() =>
         {

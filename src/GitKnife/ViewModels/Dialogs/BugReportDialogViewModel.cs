@@ -128,7 +128,7 @@ public sealed partial class BugReportDialogViewModel : DialogViewModel
         }
         // 題名と本文を入れた New issue をブラウザで開く。画像と log.txt は保存したフォルダから貼ってもらう
         Log.Info($"Bug report: opening a new issue for {s.Repository} on {s.ServerUrl}");
-        var url = report.NewIssueUrl(s.ServerUrl, s.Repository);
+        var url = report.NewIssueUrl(s.ServerUrl, s.Repository, await ServerKinds.ResolveAsync(s.ServerUrl, ct));
         // 貼るものがあるときだけフォルダを開く（画像か、本文に入りきらなかったログ。そのときは本文が log.txt を案内する）
         if (report.Images.Count > 0 || url.Contains(BugReport.LogFileName, StringComparison.Ordinal)) Open(_savedDirectory);
         Open(url);

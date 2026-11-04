@@ -26,6 +26,9 @@ public sealed partial class SidebarViewModel : ObservableObject
         if (!_rebuilding && value is not null) Navigate?.Invoke(value);
     }
 
+    /// <summary>選ばれている行をもう一度押した：選択は変わらないが、一覧をそのコミットへ動かし直す。</summary>
+    public void Renavigate(SidebarItem item) => Navigate?.Invoke(item);
+
     /// <summary>親から見て変わっている submodule に "*" を付ける（status だけ読み直したときも呼ぶ）。</summary>
     public void SetChangedSubmodules(ISet<string> changed)
     {
