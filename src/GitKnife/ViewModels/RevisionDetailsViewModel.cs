@@ -37,9 +37,23 @@ public sealed partial class RevisionDetailsViewModel(RepositoryViewModel repo, I
     private List<FileListItem> _treeRoots = [];
     private string? _treeLoadedFor;
 
-    public ObservableCollection<CommitFileEntry> Entries { get; } = [];
-    public ObservableCollection<FileListItem> ChangeRows { get; } = [];
-    public ObservableCollection<FileListItem> TreeRows { get; } = [];
+    /// <summary>Commit モードに出す変更ファイル（多いときは先頭の CommitEntryPageSize 件から。残りは Show more で足す）。</summary>
+    public BulkObservableCollection<CommitFileEntry> Entries { get; } = [];
+    public BulkObservableCollection<FileListItem> ChangeRows { get; } = [];
+    public BulkObservableCollection<FileListItem> TreeRows { get; } = [];
+
+    /// <summary>Commit モードで一度に並べるファイルの数。1 万件を超えるコミットで行を全部作ると UI が止まる。</summary>
+    public const int CommitEntryPageSize = 300;
+    private List<CommitFileEntry> _allEntries = [];
+
+    /// <summary>Commit モードでまだ並べていないファイルの数。</summary>
+    public int RemainingEntryCount => _allEntries.Count - Entries.Count;
+    public bool HasRemainingEntries => RemainingEntryCount > 0;
+    public string ShowMoreEntriesText => $"Show {Math.Min(CommitEntryPageSize, RemainingEntryCount):N0} more files ({RemainingEntryCount:N0} remaining)";
+
+    /// <summary>読み込み中（時間がかかったときだけ詳細ペインに出す）。</summary>
+    [ObservableProperty] private bool _isLoading;
+    [ObservableProperty] private string _loadingText = "";
 
     [ObservableProperty] private CommitRow? _commit;
     [ObservableProperty] private FileListItem? _selectedChange;
@@ -68,24 +82,27 @@ public sealed partial class RevisionDetailsViewModel(RepositoryViewModel repo, I
     {
         _cts?.Cancel();
         var cts = _cts = new CancellationTokenSource();
+        IsLoading = false;
         var keepPath = SelectedChange?.Path;
         Commit = row;
         Other = null;
         CompareToLocal = false;
         CompareToLocal = true;
         _host.DetailsMode = DetailsMode.Changes;
-        Entries.Clear();
+        ClearEntries();
         ChangeRows.Clear();
         _changes = [];
         Diff = null; DiffTitle = "";
         if (Reader is not { } reader) return;
         try
         {
+            using var busy = BeginLoading(cts);
             var changes = await reader.ReadChangesToWorkTreeAsync(row.Commit.Sha, cts.Token);
             if (cts.IsCancellationRequested) return;
+            busy.Report(changes.Count);
             _changes = changes;
-            _changeRoots = BuildChangeRoots();
-            RebuildChangeRows();
+            await BuildChangeRowsAsync(cts.Token);
+            if (cts.IsCancellationRequested) return;
             SelectedChange = ChangeRows.FirstOrDefault(r => !r.IsFolder && r.Path == keepPath) ?? ChangeRows.FirstOrDefault(r => !r.IsFolder);
         }
         catch (OperationCanceledException) { }
@@ -96,11 +113,12 @@ public sealed partial class RevisionDetailsViewModel(RepositoryViewModel repo, I
     {
         _cts?.Cancel();
         var cts = _cts = new CancellationTokenSource();
+        IsLoading = false;
         Commit = older;
         Other = newer;
         CompareToLocal = false;
         _host.DetailsMode = DetailsMode.Changes;
-        Entries.Clear();
+        ClearEntries();
         ChangeRows.Clear();
         _changes = [];
         Diff = null; DiffTitle = "";
@@ -108,11 +126,12 @@ public sealed partial class RevisionDetailsViewModel(RepositoryViewModel repo, I
         if (Reader is not { } reader) return;
         try
         {
+            using var busy = BeginLoading(cts);
             var changes = await reader.ReadChangesBetweenAsync(older.Commit.Sha, newer.Commit.Sha, cts.Token);
             if (cts.IsCancellationRequested) return;
+            busy.Report(changes.Count);
             _changes = changes;
-            _changeRoots = BuildChangeRoots();
-            RebuildChangeRows();
+            await BuildChangeRowsAsync(cts.Token);
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { Log.Error($"compare {older.Commit.ShortSha}..{newer.Commit.ShortSha} failed: {ex.Message}"); }
@@ -129,24 +148,31 @@ public sealed partial class RevisionDetailsViewModel(RepositoryViewModel repo, I
     {
         _cts?.Cancel();
         var cts = _cts = new CancellationTokenSource();
+        IsLoading = false;
         Commit = row;
         Other = null;
         var keepPath = SelectedChange?.Path ?? PreferredChangePath;
-        Entries.Clear();
+        ClearEntries();
         ChangeRows.Clear();
         _changes = [];
         Diff = null; DiffTitle = "";
         if (row is null || Reader is not { } reader) return;
         try
         {
+            using var busy = BeginLoading(cts);
             var changes = await reader.ReadChangesAsync(row.Commit, cts.Token);
             if (cts.IsCancellationRequested) return;
+            busy.Report(changes.Count);
             _changes = changes;
-            // Commit の一覧は git の並び（大文字が先。"README.md" が "docs/todo.md" より前）
-            foreach (var item in FileListItem.Build(changes, FileListMode.List, staged: true).OrderBy(i => i.Path, StringComparer.Ordinal))
-                Entries.Add(new CommitFileEntry(this, item));
-            _changeRoots = BuildChangeRoots();
-            RebuildChangeRows();
+            // Commit の一覧は git の並び（大文字が先。"README.md" が "docs/todo.md" より前）。行は UI の外で作る
+            var entries = await Task.Run(() => FileListItem.Build(changes, FileListMode.List, staged: true)
+                .OrderBy(i => i.Path, StringComparer.Ordinal).Select(i => new CommitFileEntry(this, i)).ToList(), cts.Token);
+            if (cts.IsCancellationRequested) return;
+            _allEntries = entries;
+            Entries.ReplaceAll(entries.Take(CommitEntryPageSize));
+            NotifyEntryCounts();
+            await BuildChangeRowsAsync(cts.Token);
+            if (cts.IsCancellationRequested) return;
             // 同じパスがあれば選び直す。無ければ最初のファイル
             SelectedChange = ChangeRows.FirstOrDefault(r => !r.IsFolder && r.Path == keepPath) ?? ChangeRows.FirstOrDefault(r => !r.IsFolder);
             if (_host.DetailsMode == DetailsMode.FileTree) await LoadTreeAsync();
@@ -163,23 +189,97 @@ public sealed partial class RevisionDetailsViewModel(RepositoryViewModel repo, I
     partial void OnChangeFilterChanged(string value)
     {
         var keep = SelectedChange?.Path;
-        _changeRoots = BuildChangeRoots();
+        _changeRoots = BuildChangeRoots(_changes, value, (FileListMode)repo.Settings.FileListMode);
         RebuildChangeRows();
         SelectedChange = ChangeRows.FirstOrDefault(r => !r.IsFolder && r.Path == keep) ?? ChangeRows.FirstOrDefault(r => !r.IsFolder);
     }
 
-    private List<FileListItem> BuildChangeRoots()
+    private static List<FileListItem> BuildChangeRoots(IReadOnlyList<StatusEntry> all, string filterText, FileListMode mode)
     {
-        var filter = ChangeFilter.Trim();
-        var changes = filter.Length == 0 ? _changes : _changes.Where(e => e.Path.Contains(filter, StringComparison.OrdinalIgnoreCase)
+        var filter = filterText.Trim();
+        var changes = filter.Length == 0 ? all : all.Where(e => e.Path.Contains(filter, StringComparison.OrdinalIgnoreCase)
             || e.OriginalPath?.Contains(filter, StringComparison.OrdinalIgnoreCase) == true).ToList();
-        return FileListItem.Build(changes, (FileListMode)repo.Settings.FileListMode, staged: true);
+        return FileListItem.Build(changes, mode, staged: true);
     }
 
-    private void RebuildChangeRows()
+    /// <summary>Changes の行を UI の外で組み立ててから、一覧をまとめて入れ替える。</summary>
+    private async Task BuildChangeRowsAsync(CancellationToken ct)
     {
-        ChangeRows.Clear();
-        foreach (var r in FileListItem.Flatten(_changeRoots)) ChangeRows.Add(r);
+        var (all, filter, mode) = (_changes, ChangeFilter, (FileListMode)repo.Settings.FileListMode);
+        var (roots, rows) = await Task.Run(() =>
+        {
+            var r = BuildChangeRoots(all, filter, mode);
+            return (r, FileListItem.Flatten(r).ToList());
+        }, ct);
+        if (ct.IsCancellationRequested) return;
+        _changeRoots = roots;
+        ChangeRows.ReplaceAll(rows);
+    }
+
+    private void RebuildChangeRows() => ChangeRows.ReplaceAll(FileListItem.Flatten(_changeRoots));
+
+    private void ClearEntries()
+    {
+        _allEntries = [];
+        Entries.Clear();
+        NotifyEntryCounts();
+    }
+
+    private void NotifyEntryCounts()
+    {
+        OnPropertyChanged(nameof(RemainingEntryCount));
+        OnPropertyChanged(nameof(HasRemainingEntries));
+        OnPropertyChanged(nameof(ShowMoreEntriesText));
+        OnPropertyChanged(nameof(ExpandAllText));
+    }
+
+    /// <summary>Commit モードの残りのファイルを次の CommitEntryPageSize 件だけ並べる。</summary>
+    [RelayCommand]
+    private void ShowMoreEntries()
+    {
+        Entries.AddRange(_allEntries.Skip(Entries.Count).Take(CommitEntryPageSize));
+        NotifyEntryCounts();
+    }
+
+    /// <summary>読み込みの間の表示を始める。using で抜けたら消す。</summary>
+    private LoadingScope BeginLoading(CancellationTokenSource cts) => new(this, cts);
+
+    /// <summary>
+    /// 読み込み中の表示。速く終わるときにちらつかないよう、少し待ってから IsLoading を立てる。
+    /// 次の読み込みが始まっていれば（_cts が替わっていれば）表示に触らない。
+    /// </summary>
+    private sealed class LoadingScope : IDisposable
+    {
+        private const int DelayMs = 150;
+        private readonly RevisionDetailsViewModel _owner;
+        private readonly CancellationTokenSource _cts;
+        private bool _done;
+
+        public LoadingScope(RevisionDetailsViewModel owner, CancellationTokenSource cts)
+        {
+            _owner = owner;
+            _cts = cts;
+            owner.LoadingText = "Loading changes...";
+            _ = ShowLaterAsync();
+        }
+
+        private async Task ShowLaterAsync()
+        {
+            await Task.Delay(DelayMs);
+            if (!_done && _owner._cts == _cts) _owner.IsLoading = true;
+        }
+
+        /// <summary>ファイルの数が分かった（行を組み立てている間に出す）。</summary>
+        public void Report(int fileCount)
+        {
+            if (_owner._cts == _cts) _owner.LoadingText = $"Preparing {fileCount:N0} files...";
+        }
+
+        public void Dispose()
+        {
+            _done = true;
+            if (_owner._cts == _cts) _owner.IsLoading = false;
+        }
     }
 
     /// <summary>フォルダ行の開閉（Gk.FileRowTemplate の矢印）。</summary>
@@ -245,12 +345,22 @@ public sealed partial class RevisionDetailsViewModel(RepositoryViewModel repo, I
         try
         {
             var files = await reader.ReadFilesAsync(row.Commit.Sha);
+            if (Commit != row) return;
+            var changes = _changes;
+            // 行の組み立ては UI の外で（全ファイルなので数万になることがある）
+            var roots = await Task.Run(() =>
+            {
+                var changed = new Dictionary<string, FileChange>(StringComparer.Ordinal);
+                foreach (var c in changes) changed[c.Path] = c.Index;
+                var entries = files.Select(f => new StatusEntry(f, changed.GetValueOrDefault(f, FileChange.Unmodified), FileChange.Unmodified));
+                var r = FileListItem.Build(entries, FileListMode.Tree, staged: true);
+                // File Tree は最初は畳んだ状態
+                foreach (var f in FileListItem.Flatten(r).Where(f => f.IsFolder)) f.IsExpanded = false;
+                return r;
+            });
+            if (Commit != row) return;
             _treeLoadedFor = row.Commit.Sha;
-            var changed = _changes.ToDictionary(c => c.Path, c => c.Index);
-            var entries = files.Select(f => new StatusEntry(f, changed.GetValueOrDefault(f, FileChange.Unmodified), FileChange.Unmodified));
-            _treeRoots = FileListItem.Build(entries, FileListMode.Tree, staged: true);
-            // File Tree は最初は畳んだ状態
-            foreach (var f in FileListItem.Flatten(_treeRoots).Where(f => f.IsFolder)) f.IsExpanded = false;
+            _treeRoots = roots;
             RebuildTreeRows();
         }
         catch (Exception ex) { Log.Error($"ls-tree failed: {ex.Message}"); }
@@ -278,11 +388,7 @@ public sealed partial class RevisionDetailsViewModel(RepositoryViewModel repo, I
         SelectedTreeFile = found;
     }
 
-    private void RebuildTreeRows()
-    {
-        TreeRows.Clear();
-        foreach (var r in FileListItem.Flatten(_treeRoots)) TreeRows.Add(r);
-    }
+    private void RebuildTreeRows() => TreeRows.ReplaceAll(FileListItem.Flatten(_treeRoots));
 
     public void ToggleTreeFolder(FileListItem folder)
     {

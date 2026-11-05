@@ -109,11 +109,14 @@
         <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
         <Setter Property="ItemContainerStyle" Value="{StaticResource Gk.FileListViewItem}"/>
         <Setter Property="AutomationProperties.AutomationId" Value="TreeView"/>
+        <!-- 行は見えている分だけ作る（1 万行を超える一覧がある）。スクロールはピクセル単位のまま -->
+        <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True"/>
+        <Setter Property="VirtualizingPanel.ScrollUnit" Value="Pixel"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ListView">
                     <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
-                        <ScrollViewer Focusable="False">
+                        <ScrollViewer Focusable="False" CanContentScroll="True">
                             <ItemsPresenter/>
                         </ScrollViewer>
                     </Border>

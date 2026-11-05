@@ -164,13 +164,36 @@
                                             </ControlTemplate>
                                         </ToggleButton.Template>
                                     </ToggleButton>
-                                    <c:DiffViewer Diff="{Binding Diff}" AutoHeightMax="700" ShowActions="False" Margin="20,2,0,10"
-                                                  Visibility="{Binding IsExpanded, Converter={StaticResource Gk.BoolToVisibility}}"/>
+                                    <!-- diff の表示（エディタ 3 枚）は開いたときに作る。閉じた行ごとに作ると、ファイルの多いコミットで止まる -->
+                                    <ContentControl Content="{Binding}" Focusable="False" IsTabStop="False">
+                                        <ContentControl.Style>
+                                            <Style TargetType="ContentControl">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                        <Setter Property="ContentTemplate">
+                                                            <Setter.Value>
+                                                                <DataTemplate>
+                                                                    <c:DiffViewer Diff="{Binding Diff}" AutoHeightMax="700" ShowActions="False" Margin="20,2,0,10"/>
+                                                                </DataTemplate>
+                                                            </Setter.Value>
+                                                        </Setter>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </ContentControl.Style>
+                                    </ContentControl>
                                 </StackPanel>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                 </Grid>
+                <!-- ファイルの多いコミット：先頭だけ並べ、残りはボタンで足す -->
+                <Button AutomationProperties.AutomationId="ShowMoreFilesButton" DataContext="{Binding DataContext.Details, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                        Content="{Binding ShowMoreEntriesText}" AutomationProperties.Name="{Binding ShowMoreEntriesText}" Command="{Binding ShowMoreEntriesCommand}"
+                        Style="{StaticResource Gk.FlatButton}" Padding="10,3" Margin="18,4,0,0" HorizontalAlignment="Left"
+                        Visibility="{Binding HasRemainingEntries, Converter={StaticResource Gk.BoolToVisibility}}"/>
             </StackPanel>
         </ScrollViewer>
         </Grid>
@@ -327,5 +350,16 @@
                 </Grid>
             </Grid>
         </UserControl>
+
+        <!-- 読み込み中（ファイルの多いコミット。少し待っても終わらないときだけ出る） -->
+        <Border Grid.Row="1" Grid.RowSpan="2" DataContext="{Binding Details}" AutomationProperties.AutomationId="RevisionLoadingIndicator"
+                Background="{DynamicResource Gk.Details.Background}" Opacity="0.92"
+                Visibility="{Binding IsLoading, Converter={StaticResource Gk.BoolToVisibility}}">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                <TextBlock Text="{Binding LoadingText}" Foreground="{DynamicResource Gk.Text.Dim}" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                <ProgressBar Width="160" Height="4" IsIndeterminate="{Binding IsLoading}" BorderThickness="0"
+                             Background="{DynamicResource Gk.Splitter}" Foreground="{DynamicResource Gk.Accent}"/>
+            </StackPanel>
+        </Border>
     </Grid>
 </UserControl>
