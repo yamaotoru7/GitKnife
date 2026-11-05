@@ -16,6 +16,7 @@ namespace GitKnife;
 /// 更新（配布先の Forgejo、GitHub、GitLab のリリースから入れる。サーバーの種類は初めて確かめるときに判定して覚える。サインインが要るサーバーはブラウザで認証）。
 /// - File > Check for Updates...：必要ならブラウザでサインインしてもらい、新しい版があれば "Update Available" を出す。
 ///   サーバーがサインインを求めているのに OAuth2 の Client ID が無ければ（インストーラに組み込まないので最初の 1 回）入れてもらう。
+///   入れた ID はサインインできてから保存し、サインインできなかった ID（保存したものも）は捨てて次の確認で入れ直してもらう。
 /// - 起動時：インストールした GitKnife で、前の確認から 1 日たっていれば、ブラウザを開かずに確かめる（トークンが無ければログに書いて何もしない）。
 /// - "Update and Restart"：インストーラを落として照合し、黙って入れる引数で起動して GitKnife を閉じる。インストーラが終わったら起動し直す（GitKnife.iss の /RELAUNCH=1）。
 /// </summary>
@@ -26,6 +27,10 @@ internal static class Updater
     private static readonly TimeSpan Interval = TimeSpan.FromDays(1);
     /// <summary>確認中（ブラウザの許可待ちを含む）。もう一度押されたら取り消してやり直す。</summary>
     private static CancellationTokenSource? _pending;
+    /// <summary>確認中の確認がブラウザの許可を待っているときの Client ID。</summary>
+    private static string? _browserClientId;
+    /// <summary>サインインできなかった Client ID（次に入力画面を出すときに最初から入れておく）。</summary>
+    private static string? _rejectedClientId;
     private static bool _dialogOpen;
 
     /// <summary>インストーラが入れた場所（入っていなければ null）。</summary>
@@ -67,18 +72,23 @@ internal static class Updater
     /// </param>
     public static async Task CheckAsync(bool interactive)
     {
-        if (await CheckOnceAsync(interactive) && interactive) await CheckOnceAsync(interactive);
+        if (await CheckOnceAsync(interactive, null) is { } entered && interactive) await CheckOnceAsync(interactive, entered);
     }
 
-    /// <summary>確かめる。Client ID を入れてもらったのでもう一度確かめるときは true。</summary>
-    private static async Task<bool> CheckOnceAsync(bool interactive)
+    /// <summary>確かめる。</summary>
+    /// <param name="enteredClientId">入力画面で入れてもらった Client ID（まだ保存していない。サインインできたら保存する）。</param>
+    /// <returns>Client ID を入れてもらったので、それでもう一度確かめるときはその値。</returns>
+    private static async Task<string?> CheckOnceAsync(bool interactive, string? enteredClientId)
     {
-        if (_dialogOpen) return false;
+        if (_dialogOpen) return null;
         if (_pending is not null)
         {
             // 前の確認がブラウザの許可を待っている（許可画面でエラーになるとブラウザは戻ってこない）。押し直しはやり直しとみなす
-            if (!interactive) return false;
+            if (!interactive) return null;
             Log.Info("Check for Updates pressed again: canceling the previous check");
+            // 許可画面から戻ってこなかった Client ID は使い続けない（登録されていない ID だと、毎回同じエラーになる）
+            if (_browserClientId is { } waiting) RejectClientId(waiting);
+            _browserClientId = null;
             _pending.Cancel();
         }
         // ダウンロード元が分からなかった（インストーラが読めなかった）：手動なら送り先を入れてもらう。自動なら今の値（既定は GitHub）で確かめる
@@ -86,29 +96,46 @@ internal static class Updater
         {
             Log.Info("Update source is not known: asking for the repository");
             _dialogOpen = true;
-            try { if (!Views.Dialogs.DialogWindow.Run(new ViewModels.Dialogs.RepositoryUrlDialogViewModel(), out _)) return false; }
+            try { if (!Views.Dialogs.DialogWindow.Run(new ViewModels.Dialogs.RepositoryUrlDialogViewModel(), out _)) return null; }
             finally { _dialogOpen = false; }
         }
         using var cts = new CancellationTokenSource();
         _pending = cts;
+        var s = App.Settings.Update;
+        var clientId = enteredClientId ?? s.OAuthClientId.Trim();
+        var browserOpened = false;
         try
         {
-            var s = App.Settings.Update;
             Log.Info($"Checking for updates ({s.ServerUrl.Trim().TrimEnd('/')}/{s.Repository}, current {ProductInfo.Version}{(interactive ? "" : ", automatic")})");
             var kind = await ServerKinds.ResolveAsync(s.ServerUrl, cts.Token);
-            using var client = new UpdateClient(s.ServerUrl, s.Repository, s.OAuthClientId, s.OAuthScope, new TokenStore(s), kind: kind);
+            using var client = new UpdateClient(s.ServerUrl, s.Repository, clientId, s.OAuthScope, new TokenStore(s), kind: kind);
+            Action<string>? openBrowser = interactive ? url =>
+            {
+                browserOpened = true;
+                if (_pending == cts) _browserClientId = clientId;
+                OpenBrowser(url);
+            } : null;
             ReleaseInfo? latest;
-            try { latest = await client.GetLatestReleaseAsync(interactive ? OpenBrowser : null, cts.Token); }
+            try { latest = await client.GetLatestReleaseAsync(openBrowser, cts.Token); }
             catch (SignInRequiredException ex)
             {
                 if (interactive && ex.NeedsClientId)
                 {
                     Log.Info("Update server requires sign-in, but no OAuth2 Client ID is set: asking for it");
                     _dialogOpen = true;
-                    return Views.Dialogs.DialogWindow.Run(new ViewModels.Dialogs.UpdateClientIdDialogViewModel(s.ServerUrl), out _);
+                    var idVm = new ViewModels.Dialogs.UpdateClientIdDialogViewModel(s.ServerUrl, _rejectedClientId);
+                    return Views.Dialogs.DialogWindow.Run(idVm, out _) ? idVm.ClientId.Trim() : null;
                 }
                 Log.Info("Update check skipped: sign-in to the update server is required (File > Check for Updates...)");
-                return false;
+                return null;
+            }
+            // サインインできた（またはサインインが要らなかった）ので、入れてもらった Client ID を残す
+            if (_pending == cts) _browserClientId = null;
+            if (enteredClientId is not null)
+            {
+                s.OAuthClientId = enteredClientId;
+                _rejectedClientId = null;
+                Log.Info("OAuth2 Client ID for the update server saved");
             }
             App.Settings.LastUpdateCheck = DateTime.Now.ToString("o", CultureInfo.InvariantCulture);
             App.SaveSettings();
@@ -117,34 +144,40 @@ internal static class Updater
             if (latest is null || !UpdateVersion.IsNewer(latest, ProductInfo.Version))
             {
                 if (interactive) Alerts.ShowInfo("Check for Updates", $"GitKnife {ProductInfo.Version} is the latest version.");
-                return false;
+                return null;
             }
             if (latest.Installer is null)
             {
                 Log.Warning($"Release {latest.TagName} has no installer asset");
                 if (interactive) Alerts.ShowError("Check for Updates", $"GitKnife {latest.Version} is available, but the release has no installer.\n{latest.HtmlUrl}");
-                return false;
+                return null;
             }
 
             var notes = await NotesSinceCurrentAsync(client, latest, cts.Token);
             _pending = null;
             _dialogOpen = true;
             var vm = new ViewModels.Dialogs.UpdateDialogViewModel(client, latest, notes);
-            if (!Views.Dialogs.DialogWindow.Run(vm, out _) || vm.InstallerPath is null) return false;
+            if (!Views.Dialogs.DialogWindow.Run(vm, out _) || vm.InstallerPath is null) return null;
             Install(vm.InstallerPath);
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested) { Log.Info("Update check canceled"); }
         catch (Exception ex) when (ex is HttpRequestException or OAuthException or OperationCanceledException or InvalidDataException or IOException or ArgumentException or JsonException)
         {
             Log.Error($"Update check failed: {ex}");
+            // ブラウザでのサインインに失敗した（時間切れ、拒否、トークンを出してもらえない）Client ID は使い続けない
+            if (ex is OAuthException && browserOpened) RejectClientId(clientId);
             if (interactive) Alerts.ShowError("Check for Updates", ex.Message);
         }
         finally
         {
-            if (_pending == cts) _pending = null;
+            if (_pending == cts)
+            {
+                _pending = null;
+                _browserClientId = null;
+            }
             _dialogOpen = false;
         }
-        return false;
+        return null;
     }
 
     /// <summary>今の版から最新までのリリースノート。途中の版が読めなくても更新は止めず、最新のノートだけを出す。</summary>
@@ -166,6 +199,21 @@ internal static class Updater
         Log.Info($"Starting the installer: {installer} {args}");
         Process.Start(new ProcessStartInfo(installer, args) { UseShellExecute = false });
         Application.Current.MainWindow?.Close();
+    }
+
+    /// <summary>
+    /// サインインできなかった Client ID を捨てる。保存してあれば消すので、次の手動の確認で入力画面がもう一度出る
+    /// （登録されていない ID だと、許可画面がエラーになりブラウザが戻ってこない。保存したままだと毎回同じエラーになっていた）。
+    /// </summary>
+    private static void RejectClientId(string clientId)
+    {
+        if (clientId.Length == 0) return;
+        _rejectedClientId = clientId;
+        var s = App.Settings.Update;
+        if (!string.Equals(s.OAuthClientId.Trim(), clientId, StringComparison.Ordinal)) return;
+        s.OAuthClientId = "";
+        App.SaveSettings();
+        Log.Info("Sign-in with the saved OAuth2 Client ID did not complete: cleared it (asked again on the next Check for Updates)");
     }
 
     private static void OpenBrowser(string url)
