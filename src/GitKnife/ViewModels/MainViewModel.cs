@@ -152,8 +152,14 @@ public sealed partial class MainViewModel : ObservableObject
     {
         var ws = Settings.Workspaces.All.FirstOrDefault(w => w.Name == Settings.Workspaces.ActiveWorkspace);
         if (ws is null) return Task.CompletedTask;
-        return RestoreTabsAsync(ws.Repositories.Where(System.IO.Directory.Exists).ToList(), ws.ActiveRepository);
+        return RestoreTabsAsync(ws.Repositories.Where(CanRestore).ToList(), ws.ActiveRepository);
     }
+
+    /// <summary>
+    /// 復元するタブ：ローカル・WSL はフォルダがあるものだけ。SSH は待たせないよう確かめずに開く（開けなければタブにエラーが出る）。
+    /// ここで落としたタブは RememberWorkspace でワークスペースからも消えるので、起動時とワークスペースの切り替えで同じものを使う。
+    /// </summary>
+    public static bool CanRestore(string path) => Core.Git.SshPath.IsSshPath(path) || System.IO.Directory.Exists(path);
 
     /// <summary>
     /// ワークスペースのタブをまとめて開く（起動時の復元とワークスペースの切り替え）。タブはすぐに全部作り、

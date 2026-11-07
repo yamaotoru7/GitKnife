@@ -135,7 +135,7 @@ public sealed partial class RebaseDialogViewModel : DialogViewModel
             StatusMessage = "Rebase can be done without conflicts";
             StatusIsSuccess = true;
         }
-        catch (Core.Git.GitException)
+        catch (Core.Git.GitException ex) when (ex.Result.ExitCode == 1)   // 競合。128 などほかの失敗は判定できないので何も出さない
         {
             StatusMessage = "Rebase will cause conflicts";
             StatusIsWarning = true;

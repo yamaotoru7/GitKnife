@@ -172,9 +172,12 @@ public static class GitArgs
     /// Rebase の事前判定（`replay --onto refs/heads/&lt;onto&gt; &lt;base&gt;..&lt;tip&gt;`）。
     /// git 2.5x 以降の replay は既定で参照を書き換える（--ref-action=update）ので、<paramref name="printOnly"/> なら `--ref-action=print` を付けて書き換えさせない
     /// （付けない形は、オプションの無い古い git でやり直すときに使う）。
+    /// <paramref name="onto"/> がコミットの SHA（40 か 64 桁の 16 進）ならそのまま渡す（refs/heads/ を付けると git が 128 で終わる）。
+    /// 競合のときの終了コードは 1（それ以外の失敗は 128）。
     /// </summary>
     public static string[] ReplayPreview(string onto, string @base, string tip, bool printOnly = true)
-        => ["replay", .. printOnly ? new[] { "--ref-action=print" } : [], "--onto", onto.StartsWith("refs/", StringComparison.Ordinal) ? onto : $"refs/heads/{onto}", $"{@base}..{tip}"];
+        => ["replay", .. printOnly ? new[] { "--ref-action=print" } : [], "--onto", onto.StartsWith("refs/", StringComparison.Ordinal) || IsFullSha(onto) ? onto : $"refs/heads/{onto}", $"{@base}..{tip}"];
+    private static bool IsFullSha(string s) => s.Length is 40 or 64 && s.All(char.IsAsciiHexDigit);
     public static string[] Rebase(string onto) => ["-c", "core.commentChar=^", "rebase", $"refs/heads/{onto}"];
     public static string AutostashMessage(string operation, DateTime time) => $"{operation} autostash {time:yyyy/MM/dd (ddd) HH:mm:ss}";
 

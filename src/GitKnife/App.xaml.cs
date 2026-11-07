@@ -95,7 +95,7 @@ public partial class App : Application
         if (ws is not null)
         {
             Log.Info($"Restore workspace '{ws.Name}' with {ws.Repositories.Count} tabs");
-            await vm.RestoreTabsAsync(ws.Repositories.Where(ExistsOrRemote).ToList(), ws.ActiveRepository);
+            await vm.RestoreTabsAsync(ws.Repositories.Where(MainViewModel.CanRestore).ToList(), ws.ActiveRepository);
         }
         foreach (var p in paths) await vm.OpenAsync(System.IO.Path.GetFullPath(p));
     }
@@ -116,15 +116,12 @@ public partial class App : Application
                 {
                     if (window.WindowState == WindowState.Minimized) window.WindowState = WindowState.Normal;
                     window.Activate();
-                    foreach (var p in lines.Where(ExistsOrRemote)) await vm.OpenAsync(p);
+                    foreach (var p in lines.Where(MainViewModel.CanRestore)) await vm.OpenAsync(p);
                 });
             }
             catch (Exception ex) { Log.Warning($"Instance pipe failed: {ex.Message}"); await Task.Delay(1000); }
         }
     }
-
-    /// <summary>復元するタブ：ローカル・WSL はフォルダがあるものだけ。SSH は起動を待たせないよう確かめずに開く（開けなければタブにエラーが出る）。</summary>
-    private static bool ExistsOrRemote(string path) => Core.Git.SshPath.IsSshPath(path) || System.IO.Directory.Exists(path);
 
     private static void SendToFirstInstance(IReadOnlyList<string> paths)
     {

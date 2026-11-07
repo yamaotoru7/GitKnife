@@ -70,6 +70,9 @@ public class GitArgsTests
         // 新しい git の replay は既定で参照を書き換えるので、事前判定は --ref-action=print を付ける（付けないのは古い git でのやり直しだけ）
         Assert.Equal("replay --ref-action=print --onto refs/heads/feature/login 7450f74..3b121ca", Join(GitArgs.ReplayPreview("feature/login", "7450f74", "3b121ca")));
         Assert.Equal("replay --onto refs/heads/feature/login 7450f74..3b121ca", Join(GitArgs.ReplayPreview("feature/login", "7450f74", "3b121ca", printOnly: false)));
+        // コミットの上に Rebase するときは SHA をそのまま（refs/heads/ を付けると git が 128 で終わり、競合と出ていた。#16）
+        Assert.Equal("replay --ref-action=print --onto b84ee8c5451dda452b37e61993a254a182149a40 7450f74..main",
+            Join(GitArgs.ReplayPreview("b84ee8c5451dda452b37e61993a254a182149a40", "7450f74", "main")));
         Assert.Equal("-c core.commentChar=^ rebase refs/heads/feature/login", Join(GitArgs.Rebase("feature/login")));
         Assert.Equal("pull --rebase=true origin --prune --progress", Join(GitArgs.Pull("origin", rebase: true)));
         var msg = GitArgs.AutostashMessage("Rebase", new DateTime(2026, 10, 24, 23, 50, 11));
