@@ -4,7 +4,7 @@
 ; 設定（%LocalAppData%\GitKnife）はアンインストールでも消さない。
 
 #ifndef AppVersion
-  #define AppVersion "0.1.17"
+  #define AppVersion "0.1.18"
 #endif
 #ifndef PublishDir
   #define PublishDir "..\.work\publish"
@@ -37,6 +37,10 @@ Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
 CloseApplications=yes
+; Setup の RedirectionGuard（Inno Setup 6.7 から既定で有効）は [Run] で起動した GitKnife にも引き継がれ、
+; そこから動く git と ssh が、ユーザーが作ったジャンクション（~/.ssh を dotfiles に向けたものなど）を通れなくなる
+; （known_hosts が Permission denied になり fetch できなかった。#17）。管理者権限なしで入れるので守るものが無く、切る
+RedirectionGuard=no
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
