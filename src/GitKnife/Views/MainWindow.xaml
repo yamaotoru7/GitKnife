@@ -125,10 +125,11 @@
             <TextBlock Text="{Binding Title}" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="12" Foreground="{DynamicResource Gk.Text}"/>
 
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" WindowChrome.IsHitTestVisibleInChrome="True">
-                <Button AutomationProperties.AutomationId="Part_NotificationManagerToggleButton" Style="{StaticResource Gk.CaptionButton}" Width="30" ToolTip="Notifications">
+                <Button AutomationProperties.AutomationId="Part_NotificationManagerToggleButton" Style="{StaticResource Gk.CaptionButton}" Width="30" ToolTip="Notifications (not available yet)"
+                        IsEnabled="False" ToolTipService.ShowOnDisabled="True">
                     <Path Style="{StaticResource Gk.IconPath}" Data="{StaticResource Icon.Bell}"/>
                 </Button>
-                <Button AutomationProperties.AutomationId="FeedbackButton" Style="{StaticResource Gk.CaptionButton}" Width="30" ToolTip="Feedback">
+                <Button AutomationProperties.AutomationId="FeedbackButton" Style="{StaticResource Gk.CaptionButton}" Width="30" ToolTip="Feedback (Ctrl+Shift+F12)" Click="Feedback_Click">
                     <Path Style="{StaticResource Gk.IconPath}" Data="{StaticResource Icon.Smile}"/>
                 </Button>
                 <Button x:Name="MinimizeButton" AutomationProperties.AutomationId="PART_MinimizeButton" Style="{StaticResource Gk.CaptionButton}" Click="Minimize_Click">

@@ -553,6 +553,8 @@ public partial class MainWindow : Window
     private void SwitchTheme_Click(object sender, RoutedEventArgs e) => ThemeManager.Toggle(App.Settings);
 
     /// <summary>Help > About GitKnife（AboutDialogViewModel）。</summary>
+    private void Feedback_Click(object sender, RoutedEventArgs e) => BugReporter.ShowForMainWindow();
+
     private async void About_Click(object sender, RoutedEventArgs e)
     {
         string version;

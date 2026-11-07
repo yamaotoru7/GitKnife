@@ -354,13 +354,19 @@ public sealed partial class RevisionDetailsViewModel(RepositoryViewModel repo, I
                 foreach (var c in changes) changed[c.Path] = c.Index;
                 var entries = files.Select(f => new StatusEntry(f, changed.GetValueOrDefault(f, FileChange.Unmodified), FileChange.Unmodified));
                 var r = FileListItem.Build(entries, FileListMode.Tree, staged: true);
-                // File Tree は最初は畳んだ状態
-                foreach (var f in FileListItem.Flatten(r).Where(f => f.IsFolder)) f.IsExpanded = false;
+                // File Tree は最初はすべてのフォルダを畳んだ状態（Flatten は開いたフォルダにしか入らないので、Children を全部たどる）
+                Collapse(r);
                 return r;
+
+                static void Collapse(List<FileListItem> items)
+                {
+                    foreach (var f in items.Where(f => f.IsFolder)) { f.IsExpanded = false; Collapse(f.Children); }
+                }
             });
             if (Commit != row) return;
             _treeLoadedFor = row.Commit.Sha;
             _treeRoots = roots;
+            SelectedTreeFile = null;   // 前のコミットの行は引き継がない
             RebuildTreeRows();
         }
         catch (Exception ex) { Log.Error($"ls-tree failed: {ex.Message}"); }
@@ -388,7 +394,21 @@ public sealed partial class RevisionDetailsViewModel(RepositoryViewModel repo, I
         SelectedTreeFile = found;
     }
 
-    private void RebuildTreeRows() => TreeRows.ReplaceAll(FileListItem.Flatten(_treeRoots));
+    /// <summary>
+    /// 行を並べ直す。選んでいた行はそのまま選び、閉じたフォルダの中に隠れたらそのフォルダを選ぶ
+    /// （並べ直すと ListView が選択を外すので、その間の選択の変化は無視する）。
+    /// </summary>
+    private void RebuildTreeRows()
+    {
+        var selected = SelectedTreeFile;
+        _rebuildingTree = true;
+        try { TreeRows.ReplaceAll(FileListItem.Flatten(_treeRoots)); }
+        finally { _rebuildingTree = false; }
+        if (selected is null) return;
+        var visible = TreeRows.Contains(selected) ? selected : TreeRows.Where(r => r.IsFolder && selected.Path.StartsWith(r.Path + "/", StringComparison.Ordinal)).FirstOrDefault(r => !r.IsExpanded);
+        SelectedTreeFile = visible;
+    }
+    private bool _rebuildingTree;
 
     public void ToggleTreeFolder(FileListItem folder)
     {
@@ -396,20 +416,43 @@ public sealed partial class RevisionDetailsViewModel(RepositoryViewModel repo, I
         RebuildTreeRows();
     }
 
+    /// <summary>
+    /// File Tree のキー操作（エクスプローラーと同じ）。→：閉じたフォルダは 1 階層だけ開き、開いたフォルダは最初の子へ。
+    /// ←：開いたフォルダは閉じ、それ以外は親のフォルダへ。動いたら true。
+    /// </summary>
+    public bool TreeKey(bool right)
+    {
+        if (SelectedTreeFile is not { } item) return false;
+        if (right)
+        {
+            if (!item.IsFolder) return false;
+            if (!item.IsExpanded) { ToggleTreeFolder(item); return true; }
+            if (item.Children.Count == 0) return false;
+            SelectedTreeFile = item.Children[0];
+            return true;
+        }
+        if (item is { IsFolder: true, IsExpanded: true }) { ToggleTreeFolder(item); return true; }
+        var slash = item.Path.LastIndexOf('/');
+        if (slash < 0) return false;
+        var parentPath = item.Path[..slash];
+        if (TreeRows.FirstOrDefault(r => r.IsFolder && r.Path == parentPath) is not { } parent) return false;
+        SelectedTreeFile = parent;
+        return true;
+    }
+
     partial void OnSelectedTreeFileChanged(FileListItem? value)
     {
-        // 閉じたフォルダの行をクリックすると開く
-        if (value is { IsFolder: true, IsExpanded: false })
-        {
-            ToggleTreeFolder(value);
-            SelectedTreeFile = value;
-            return;
-        }
+        if (_rebuildingTree) return;
+        // フォルダは選んだだけでは開かない（矢印か → で開く）
         _ = LoadPreviewAsync(value);
     }
 
+    private FileListItem? _previewFor;
+
     private async Task LoadPreviewAsync(FileListItem? item)
     {
+        if (item is not null && item == _previewFor) return;
+        _previewFor = item;
         if (item is null || item.IsFolder || Commit is not { } row || Reader is not { } reader) { PreviewText = null; PreviewTitle = ""; return; }
         var text = await reader.ReadFileTextAsync(row.Commit.Sha, item.Path);
         PreviewTitle = item.Path;

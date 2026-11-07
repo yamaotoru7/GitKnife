@@ -40,6 +40,13 @@ internal static class BugReporter
         else Show(sender as Window, null);
     }
 
+    /// <summary>タイトルバーの Feedback ボタンから：メインウィンドウを撮ってバグレポートのダイアログを出す。</summary>
+    public static void ShowForMainWindow()
+    {
+        if (_open) return;
+        Show(Application.Current.MainWindow, null);
+    }
+
     private static void Show(Window? active, List<BugReportImage>? images)
     {
         _open = true;
