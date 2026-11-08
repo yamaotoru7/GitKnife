@@ -62,7 +62,7 @@ public sealed partial class LocalChangesViewModel : ObservableObject
     /// <summary>表示の設定（FileListMode、DiffContextSize、DiffShowEntireFile、CommitDiffLayoutMode）が変わった。</summary>
     public void SettingsChanged()
     {
-        if (_repo.Status is { } s) Load(s);
+        if (_repo.Status is { } s) Load(s, force: true);
     }
 
     private FileListMode Mode => (FileListMode)_repo.Settings.FileListMode;
@@ -90,10 +90,15 @@ public sealed partial class LocalChangesViewModel : ObservableObject
 
     partial void OnFileFilterChanged(string value)
     {
-        if (_repo.Status is { } st) Load(st);
+        if (_repo.Status is { } st) Load(st, force: true);
     }
 
-    public void Load(RepositoryStatus status)
+    /// <summary>
+    /// force = false（読み直し：自動 fetch、ファイルの監視、定期の status）のときは、一覧が前と同じなら一覧を作り直さず、
+    /// diff も中身が同じなら差し替えない（表示のちらつきとスクロール位置が先頭に戻るのを避ける）。
+    /// 表示の設定やフィルタを変えたときは force = true で作り直す。
+    /// </summary>
+    public void Load(RepositoryStatus status, bool force = false)
     {
         var expandedOff = FileListItem.Flatten(_unstagedRoots).Concat(FileListItem.Flatten(_stagedRoots))
             .Where(r => r.IsFolder && !r.IsExpanded).Select(r => r.Path).ToHashSet();
@@ -103,12 +108,21 @@ public sealed partial class LocalChangesViewModel : ObservableObject
         // Hide Untracked Files / Show Ignored Files（ファイル一覧の設定ドロップダウン）
         var unstaged = status.Unstaged.Where(e => !(_repo.HideUntracked && e.WorkTree == FileChange.Untracked))
             .Concat(_repo.ShowIgnored ? status.Entries.Where(e => e.WorkTree == FileChange.Ignored) : []);
-        _unstagedRoots = FileListItem.Build(unstaged.Where(MatchesFilter), Mode, staged: false);
+        var newUnstaged = FileListItem.Build(unstaged.Where(MatchesFilter), Mode, staged: false);
         // Amend 中は Staged に最後のコミットの変更も出す
-        _stagedRoots = FileListItem.Build((Amend && _amendStaged is { } amendStaged ? amendStaged : status.Staged).Where(MatchesFilter), Mode, staged: true);
+        var newStaged = FileListItem.Build((Amend && _amendStaged is { } amendStaged ? amendStaged : status.Staged).Where(MatchesFilter), Mode, staged: true);
         if (Amend) _ = RefreshAmendStagedAsync();
-        foreach (var f in AllRows(_unstagedRoots).Concat(AllRows(_stagedRoots)))
+        foreach (var f in AllRows(newUnstaged).Concat(AllRows(newStaged)))
             if (f.IsFolder && expandedOff.Contains(f.Path)) f.IsExpanded = false;
+        if (!force && SameRows(_unstagedRoots, newUnstaged) && SameRows(_stagedRoots, newStaged))
+        {
+            // 一覧は変わらない：行と選択はそのまま、diff だけ読み直して変わったときだけ差し替える
+            PrefillMergeMessage();
+            _ = LoadDiffAsync(keepIfSame: true);
+            return;
+        }
+        _unstagedRoots = newUnstaged;
+        _stagedRoots = newStaged;
         RebuildRows();
 
         _selectedUnstaged = FileListItem.Flatten(_unstagedRoots).Where(r => selU.Contains(r.Path)).ToList();
@@ -140,6 +154,18 @@ public sealed partial class LocalChangesViewModel : ObservableObject
     public event EventHandler? SelectionRestored;
     public IReadOnlyList<FileListItem> SelectedUnstaged => _selectedUnstaged;
     public IReadOnlyList<FileListItem> SelectedStaged => _selectedStaged;
+
+    /// <summary>2 つの一覧の行（パス、フォルダか、status、展開）がすべて同じか。</summary>
+    private static bool SameRows(List<FileListItem> a, List<FileListItem> b)
+    {
+        var x = AllRows(a).ToList();
+        var y = AllRows(b).ToList();
+        if (x.Count != y.Count) return false;
+        for (var i = 0; i < x.Count; i++)
+            if (x[i].Path != y[i].Path || x[i].IsFolder != y[i].IsFolder || x[i].Level != y[i].Level || x[i].Change != y[i].Change
+                || x[i].IsExpanded != y[i].IsExpanded || !Equals(x[i].Entry, y[i].Entry)) return false;
+        return true;
+    }
 
     private static IEnumerable<FileListItem> AllRows(IEnumerable<FileListItem> roots)
         => roots.SelectMany(r => new[] { r }.Concat(AllRows(r.Children)));
@@ -191,7 +217,8 @@ public sealed partial class LocalChangesViewModel : ObservableObject
 
     // ------------------------------------------------------------------ diff
 
-    private async Task LoadDiffAsync()
+    /// <param name="keepIfSame">読み直しのとき：同じファイルで中身も同じなら表示を差し替えない（スクロール位置を保つ）。</param>
+    private async Task LoadDiffAsync(bool keepIfSame = false)
     {
         _diffCts?.Cancel();
         var cts = _diffCts = new CancellationTokenSource();
@@ -209,12 +236,14 @@ public sealed partial class LocalChangesViewModel : ObservableObject
             {
                 var (ours, theirs) = await tree.ReadConflictCommitsAsync(entry.Path, cts.Token);
                 if (cts.IsCancellationRequested) return;
+                var text = await tree.ReadWorkingFileAsync(entry.Path);
+                var resolved = !text.Split('\n').Any(l => l.StartsWith("<<<<<<< ", StringComparison.Ordinal) || l.StartsWith(">>>>>>> ", StringComparison.Ordinal));
+                if (cts.IsCancellationRequested) return;
+                if (keepIfSame && Conflict is { } current && current.Path == entry.Path && current.IsResolved == resolved && Equals(DiffEntry, entry)) return;
                 DiffEntry = entry;
                 DiffIsStaged = false;
                 DiffTitle = entry.Path;
                 Diff = null;
-                var text = await tree.ReadWorkingFileAsync(entry.Path);
-                var resolved = !text.Split('\n').Any(l => l.StartsWith("<<<<<<< ", StringComparison.Ordinal) || l.StartsWith(">>>>>>> ", StringComparison.Ordinal));
                 Conflict = new ConflictInfo(entry.Path, _repo.Notification.State?.Other ?? "theirs", _repo.References?.HeadBranch ?? "HEAD", ours, theirs) { IsResolved = resolved };
                 return;
             }
@@ -223,6 +252,7 @@ public sealed partial class LocalChangesViewModel : ObservableObject
                 ? await tree.ReadAmendDiffAsync(entry, FileDiffPanel.ContextLines, cts.Token)
                 : await tree.ReadDiffAsync(entry, staged, FileDiffPanel.ContextLines, cts.Token);
             if (cts.IsCancellationRequested) return;
+            if (keepIfSame && Equals(DiffEntry, entry) && DiffIsStaged == staged && FileDiff.SameContent(Diff, diff)) return;
             DiffEntry = entry;
             DiffIsStaged = staged;
             DiffTitle = entry.Path;
@@ -479,7 +509,7 @@ public sealed partial class LocalChangesViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(CanUnstage));
         if (!value) _amendStaged = null;
-        if (_repo.Status is { } st) Load(st);
+        if (_repo.Status is { } st) Load(st, force: true);
         // Amend をオンにすると最後のコミットのメッセージを欄に入れる（件名が空のときだけ）。オフに戻したら、入れたままなら消す
         if (!value)
         {

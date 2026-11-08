@@ -533,7 +533,13 @@ public sealed partial class RepositoryViewModel : ObservableObject, IRevisionDet
         OnPropertyChanged(nameof(BehindCount));
     }
 
-    partial void OnSelectedCommitChanged(CommitRow? value) => _ = Details.LoadAsync(value);
+    private bool _replacingCommits;
+
+    partial void OnSelectedCommitChanged(CommitRow? value)
+    {
+        if (value is null && _replacingCommits) return;
+        if (!Details.ReplaceRow(value)) _ = Details.LoadAsync(value);
+    }
 
     partial void OnDetailsModeChanged(DetailsMode value)
     {
@@ -626,9 +632,16 @@ public sealed partial class RepositoryViewModel : ObservableObject, IRevisionDet
             OnPropertyChanged(nameof(StatusTitle));
             OnPropertyChanged(nameof(StatusLine1));
             GraphLanes = graph.Count == 0 ? 1 : graph.Max(g => g.Width);
-            Commits.Clear();
-            foreach (var r in rows) Commits.Add(r);
+            // 入れ替えの途中で一覧の選択が一時的に外れても（null）、詳細は消さない（同じコミットを選び直したら ReplaceRow で済ませる）
+            _replacingCommits = true;
+            try
+            {
+                Commits.Clear();
+                foreach (var r in rows) Commits.Add(r);
+            }
+            finally { _replacingCommits = false; }
             SelectedCommit = Commits.FirstOrDefault(c => c.Commit.Sha == selectedSha) ?? Commits.FirstOrDefault(c => c.IsHead) ?? Commits.FirstOrDefault();
+            if (SelectedCommit is null && Details.Commit is not null) _ = Details.LoadAsync(null);
             Find.Refresh(select: false);
             Log.Info($"Refresh '{Name}' data. {commits.Count} commits, status {Status.ChangeCount} files");
         }

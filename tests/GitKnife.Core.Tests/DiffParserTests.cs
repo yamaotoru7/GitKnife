@@ -140,4 +140,19 @@ public class DiffParserTests(SandboxFixture sandbox)
         var ctx = Assert.IsType<ContextSection>(Assert.Single(sections));
         Assert.Equal(2, ctx.Lines.Count);
     }
+
+    [Fact]
+    public void SameContentComparesHeadersAndLines()
+    {
+        const string text = "diff --git a/x.txt b/x.txt\nindex 1111111..2222222 100644\n--- a/x.txt\n+++ b/x.txt\n@@ -1,2 +1,2 @@\n a\n-b\n+c\n";
+        var a = UnifiedDiffParser.Parse(text).Single();
+        var b = UnifiedDiffParser.Parse(text).Single();
+        Assert.True(FileDiff.SameContent(a, b));
+        Assert.True(FileDiff.SameContent(null, null));
+        Assert.False(FileDiff.SameContent(a, null));
+        var changed = UnifiedDiffParser.Parse(text.Replace("+c", "+d")).Single();
+        Assert.False(FileDiff.SameContent(a, changed));
+        var otherIndex = UnifiedDiffParser.Parse(text.Replace("2222222", "3333333")).Single();
+        Assert.False(FileDiff.SameContent(a, otherIndex));
+    }
 }

@@ -50,6 +50,21 @@ public sealed class FileDiff
     public bool ModeChanged => OldMode is not null && NewMode is not null && OldMode != NewMode;
     public int Additions => Hunks.Sum(h => h.Lines.Count(l => l.Kind == DiffLineKind.Added));
     public int Deletions => Hunks.Sum(h => h.Lines.Count(l => l.Kind == DiffLineKind.Removed));
+
+    /// <summary>
+    /// 2 つの diff の中身が同じか（見出しの行とハンクの行がすべて同じ）。
+    /// 読み直した diff が前と同じなら、表示を作り直さない（スクロール位置を保つ）のに使う。
+    /// </summary>
+    public static bool SameContent(FileDiff? a, FileDiff? b)
+    {
+        if (ReferenceEquals(a, b)) return true;
+        if (a is null || b is null) return false;
+        if (a.OldPath != b.OldPath || a.NewPath != b.NewPath || a.IsBinary != b.IsBinary || !a.HeaderLines.SequenceEqual(b.HeaderLines)) return false;
+        if (a.Hunks.Count != b.Hunks.Count) return false;
+        for (var i = 0; i < a.Hunks.Count; i++)
+            if (a.Hunks[i].Header != b.Hunks[i].Header || !a.Hunks[i].Lines.SequenceEqual(b.Hunks[i].Lines)) return false;
+        return true;
+    }
 }
 
 /// <summary>

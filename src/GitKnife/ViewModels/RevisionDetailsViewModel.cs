@@ -144,6 +144,17 @@ public sealed partial class RevisionDetailsViewModel(RepositoryViewModel repo, I
     /// <summary>最初に選ぶファイル（別ウィンドウはポップアップで選んでいたファイルを引き継ぐ）。</summary>
     public string? PreferredChangePath { get; set; }
 
+    /// <summary>
+    /// 一覧を読み直して同じコミットの行が作り直されたとき（自動 fetch など）：行だけ差し替え、ファイル一覧と diff は読み直さない
+    /// （表示のちらつきと、diff のスクロール位置が先頭に戻るのを避ける。コミットの中身は変わらない）。差し替えたら true。
+    /// </summary>
+    public bool ReplaceRow(CommitRow? row)
+    {
+        if (row is null || Commit is not { } current || IsComparing || current.Commit.Sha != row.Commit.Sha) return false;
+        Commit = row;
+        return true;
+    }
+
     public async Task LoadAsync(CommitRow? row)
     {
         _cts?.Cancel();
