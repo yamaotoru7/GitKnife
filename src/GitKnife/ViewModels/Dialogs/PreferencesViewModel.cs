@@ -231,12 +231,52 @@ public sealed partial class PreferencesViewModel : DialogViewModel
 
     // ------------------------------------------------------------------ Updates
 
-    /// <summary>"Automatic Updates:"（ApplicationUpdateType。0 = "Develop Channel"）。GitKnife に自動更新は無い。</summary>
-    public IReadOnlyList<string> UpdateTypes { get; } = ["Develop Channel", "Stable Channel", "Disabled"];
-    public string UpdateType
+    // 更新は配布先のリポジトリのリリースから（チャンネルは無い）。ApplicationUpdateType は設定に残すが使わない。
+
+    /// <summary>起動時に 1 日 1 回確かめる（インストールした GitKnife だけ）。</summary>
+    public bool CheckForUpdatesAutomatically { get => _s.Update.CheckAutomatically; set => _s.Update.CheckAutomatically = value; }
+    public string CurrentVersion => Core.ProductInfo.Version;
+    /// <summary>開発中の bin\Debug などでは自動の確認をしないので、そう書き添える。</summary>
+    public bool IsNotInstalledCopy => !Updater.IsInstalledCopy;
+
+    [ObservableProperty] private string _updateSource = "";
+    [ObservableProperty] private string _lastUpdateCheck = "";
+    [ObservableProperty] private bool _isSignedInToUpdateServer;
+    [ObservableProperty] private bool _isCheckingForUpdates;
+
+    public void RefreshUpdateInfo()
     {
-        get => UpdateTypes[Math.Clamp(_s.ApplicationUpdateType, 0, UpdateTypes.Count - 1)];
-        set => _s.ApplicationUpdateType = Math.Max(0, UpdateTypes.ToList().IndexOf(value));
+        var u = _s.Update;
+        UpdateSource = _s.IsRepositoryKnown() ? Core.Distribution.RepositoryUrl(u.ServerUrl, u.Repository) : "(not set)";
+        LastUpdateCheck = DateTime.TryParse(_s.LastUpdateCheck, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var t)
+            ? t.ToLocalTime().ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture)
+            : "Never";
+        IsSignedInToUpdateServer = Updater.HasSignIn;
+    }
+
+    /// <summary>Check Now（File > Check for Updates... と同じ）。</summary>
+    public async Task CheckForUpdatesNowAsync()
+    {
+        if (IsCheckingForUpdates) return;
+        IsCheckingForUpdates = true;
+        try { await Updater.CheckAsync(interactive: true); }
+        finally
+        {
+            IsCheckingForUpdates = false;
+            RefreshUpdateInfo();
+        }
+    }
+
+    /// <summary>Change...：更新とバグ報告の送り先のリポジトリを入れ直す。</summary>
+    public void ChangeUpdateSource()
+    {
+        if (Views.Dialogs.DialogWindow.Run(new RepositoryUrlDialogViewModel(changing: true), out _)) RefreshUpdateInfo();
+    }
+
+    public void SignOutOfUpdateServer()
+    {
+        Updater.SignOut();
+        RefreshUpdateInfo();
     }
 }
 

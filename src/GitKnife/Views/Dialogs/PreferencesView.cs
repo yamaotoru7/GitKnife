@@ -311,14 +311,58 @@ internal sealed class PreferencesView : UserControl
     /// <summary>グローバルのカスタムコマンド。</summary>
     private FrameworkElement CustomCommands() => new CustomCommandsEditorView(_vm.CustomCommands) { Margin = new Thickness(0, 6, 0, 4) };
 
+    /// <summary>
+    /// 更新：起動時の自動の確認、今の版と最後に確かめた日時、Check Now、送り先のリポジトリ（Change...）、サインインしていれば Sign Out。
+    /// </summary>
     private FrameworkElement Updates()
     {
+        const double lw = 150;
         var p = new SettingsPage();
-        var combo = Combo("AutomaticUpdateComboBox", nameof(PreferencesViewModel.UpdateTypes), nameof(PreferencesViewModel.UpdateType));
-        combo.Width = 278;
-        combo.HorizontalAlignment = HorizontalAlignment.Left;
-        p.Row("Automatic Updates:", combo, labelWidth: 170);
+        var auto = Check("CheckForUpdatesAutomaticallyCheckBox", "Check for updates automatically", nameof(PreferencesViewModel.CheckForUpdatesAutomatically));
+        p.Row(null, auto, labelWidth: lw);
+        var autoNote = Note("Once a day, when GitKnife starts.");
+        p.Row(null, autoNote, labelWidth: lw);
+        var devNote = Note("Automatic checks run only in the installed GitKnife.");
+        devNote.SetBinding(VisibilityProperty, new Binding(nameof(PreferencesViewModel.IsNotInstalledCopy)) { Converter = BoolToVisibility.Instance });
+        p.Row(null, devNote, labelWidth: lw);
+        p.Separator();
+
+        p.Row("Current version:", Value(null, nameof(PreferencesViewModel.CurrentVersion), "CurrentVersionTextBlock"), labelWidth: lw);
+        p.Row("Last checked:", Value(null, nameof(PreferencesViewModel.LastUpdateCheck), "LastUpdateCheckTextBlock"), labelWidth: lw);
+        var check = PageButton("CheckForUpdatesNowButton", "Check Now", async () => await _vm.CheckForUpdatesNowAsync());
+        check.SetBinding(IsEnabledProperty, new Binding(nameof(PreferencesViewModel.IsCheckingForUpdates)) { Converter = Invert.Instance });
+        p.Row(null, check, labelWidth: lw);
+        p.Separator();
+
+        var source = Value(null, nameof(PreferencesViewModel.UpdateSource), "UpdateSourceTextBlock");
+        source.Margin = new Thickness(4, 0, 8, 0);
+        var change = PageButton("ChangeUpdateSourceButton", "Change...", _vm.ChangeUpdateSource);
+        var sourceRow = new DockPanel();
+        DockPanel.SetDock(change, Dock.Right);
+        sourceRow.Children.Add(change);
+        sourceRow.Children.Add(source);
+        sourceRow.Margin = new Thickness(0, 0, 14, 0);
+        p.Row("Repository:", sourceRow, labelWidth: lw);
+        p.Row(null, Note("Updates come from this repository. Bug reports go there too."), labelWidth: lw);
+        var signOut = PageButton("SignOutOfUpdateServerButton", "Sign Out", _vm.SignOutOfUpdateServer);
+        var signRow = Horizontal(signOut, Note("Signed in to the update server."));
+        ((FrameworkElement)signRow.Children[1]).VerticalAlignment = VerticalAlignment.Center;
+        ((FrameworkElement)signRow.Children[1]).Margin = new Thickness(10, 0, 0, 0);
+        signRow.SetBinding(VisibilityProperty, new Binding(nameof(PreferencesViewModel.IsSignedInToUpdateServer)) { Converter = BoolToVisibility.Instance });
+        p.Row(null, signRow, labelWidth: lw);
+
+        Loaded += (_, _) => _vm.RefreshUpdateInfo();
         return p;
+    }
+
+    private static Button PageButton(string id, string text, Action click)
+    {
+        var b = new Button { Content = text, Padding = new Thickness(10, 2, 10, 2), HorizontalAlignment = HorizontalAlignment.Left };
+        b.SetResourceReference(StyleProperty, "Gk.Button");
+        b.MinWidth = 0;
+        AutomationProperties.SetAutomationId(b, id);
+        b.Click += (_, _) => click();
+        return b;
     }
 
     // ------------------------------------------------------------------ Hosts（GitKnife だけ。T1301）
@@ -431,6 +475,20 @@ internal sealed class PreferencesView : UserControl
         b.SetResourceReference(StyleProperty, "Gk.HeaderIconButton");
         b.Click += (_, _) => action();
         return b;
+    }
+
+    internal sealed class BoolToVisibility : IValueConverter
+    {
+        public static readonly BoolToVisibility Instance = new();
+        public object Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture) => value is true ? Visibility.Visible : Visibility.Collapsed;
+        public object ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture) => throw new NotSupportedException();
+    }
+
+    internal sealed class Invert : IValueConverter
+    {
+        public static readonly Invert Instance = new();
+        public object Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture) => value is not true;
+        public object ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture) => throw new NotSupportedException();
     }
 
     internal sealed class NotNullToVisibility : IValueConverter

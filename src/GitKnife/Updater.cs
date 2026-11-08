@@ -216,6 +216,26 @@ internal static class Updater
         Log.Info("Sign-in with the saved OAuth2 Client ID did not complete: cleared it (asked again on the next Check for Updates)");
     }
 
+    /// <summary>更新のサーバーにサインインしている（トークンか Client ID が残っている）。Preferences > Updates の Sign Out を出すか。</summary>
+    public static bool HasSignIn
+    {
+        get
+        {
+            var s = App.Settings.Update;
+            return s.OAuthClientId.Trim().Length > 0 || new TokenStore(s).Load() is not null;
+        }
+    }
+
+    /// <summary>更新のサーバーのトークンと Client ID を消す（次の手動の確認でサインインし直す）。</summary>
+    public static void SignOut()
+    {
+        var s = App.Settings.Update;
+        new TokenStore(s).Save(null);
+        s.OAuthClientId = "";
+        App.SaveSettings();
+        Log.Info("Signed out of the update server (token and OAuth2 Client ID cleared)");
+    }
+
     private static void OpenBrowser(string url)
     {
         var q = url.IndexOf('?');
