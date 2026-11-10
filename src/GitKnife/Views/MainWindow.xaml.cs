@@ -21,15 +21,21 @@ public partial class MainWindow : Window
         InitializeComponent();
         InputBindings.Add(new KeyBinding(new RelayAction(() => OpenRepository_Click(this, new RoutedEventArgs())), Key.O, ModifierKeys.Control));
         SourceInitialized += (_, _) => RestoreLocation();
-        StateChanged += (_, _) => UpdateMaximizeState();
+        StateChanged += (_, _) =>
+        {
+            UpdateMaximizeState();
+            if (_refreshOnRestore && WindowState != WindowState.Minimized) { _refreshOnRestore = false; RefreshOnActivated(); }
+        };
         Closing += (_, _) => SaveLocation();
         // ウィンドウに戻ったら status を読み直す（外部のエディタで変えた分）
         // SSH のリポジトリは見張れないので、参照（向こうでの commit や checkout）も含めて読み直す（T1304。常駐のシェルで 0.2 秒ほど）
+        // タスクバーのボタンで戻すときは、最小化のままアクティブにされてから元に戻す指示（SC_RESTORE）が来る。
+        // その間に git を起動すると SC_RESTORE が来なくなり、窓が戻らずに Windows の音が鳴る（一回おきに起きていた）ので、
+        // 最小化のままアクティブにされたときは、元に戻ってから読み直す
         Activated += (_, _) =>
         {
-            RestoreIfActivatedWhileMinimized();
-            if (Vm.SelectedTab is not { IsManager: false } tab) return;
-            _ = Core.Git.SshPath.IsSshPath(tab.Path) ? tab.RefreshAsync() : tab.RefreshStatusAsync();
+            if (WindowState == WindowState.Minimized) { _refreshOnRestore = true; return; }
+            RefreshOnActivated();
         };
         UpdateMaximizeState();
         AddShortcuts();
@@ -187,23 +193,12 @@ public partial class MainWindow : Window
         RootGrid.Margin = max ? new Thickness(7) : new Thickness(0);
     }
 
-    /// <summary>
-    /// 最小化したままアクティブにされ、元に戻す指示（SC_RESTORE）が来なければ自分で元に戻す。
-    /// タスクバーのボタンで最小化すると、次のボタンのクリックではアクティブにされるだけで、元に戻るのはその次のクリックになっていた
-    /// （タスクバーが先に手前に来てから窓をアクティブにしたとき。普通は SC_RESTORE がアクティブ化の数ミリ秒後に来る）。
-    /// </summary>
-    private void RestoreIfActivatedWhileMinimized()
+    private bool _refreshOnRestore;
+
+    private void RefreshOnActivated()
     {
-        if (WindowState != WindowState.Minimized) return;
-        var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
-        timer.Tick += (_, _) =>
-        {
-            timer.Stop();
-            if (WindowState != WindowState.Minimized || !IsActive) return;
-            Core.Logging.Log.Info("Activated while minimized without a restore command; restoring the window");
-            SystemCommands.RestoreWindow(this);
-        };
-        timer.Start();
+        if (Vm.SelectedTab is not { IsManager: false } tab) return;
+        _ = Core.Git.SshPath.IsSshPath(tab.Path) ? tab.RefreshAsync() : tab.RefreshStatusAsync();
     }
 
     private void Minimize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
