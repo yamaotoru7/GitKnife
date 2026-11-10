@@ -27,6 +27,7 @@ public partial class MainWindow : Window
         // SSH のリポジトリは見張れないので、参照（向こうでの commit や checkout）も含めて読み直す（T1304。常駐のシェルで 0.2 秒ほど）
         Activated += (_, _) =>
         {
+            RestoreIfActivatedWhileMinimized();
             if (Vm.SelectedTab is not { IsManager: false } tab) return;
             _ = Core.Git.SshPath.IsSshPath(tab.Path) ? tab.RefreshAsync() : tab.RefreshStatusAsync();
         };
@@ -184,6 +185,25 @@ public partial class MainWindow : Window
         RestoreButton.Visibility = max ? Visibility.Visible : Visibility.Collapsed;
         // 最大化すると枠のぶん画面外にはみ出すので内側に余白を入れる
         RootGrid.Margin = max ? new Thickness(7) : new Thickness(0);
+    }
+
+    /// <summary>
+    /// 最小化したままアクティブにされ、元に戻す指示（SC_RESTORE）が来なければ自分で元に戻す。
+    /// タスクバーのボタンで最小化すると、次のボタンのクリックではアクティブにされるだけで、元に戻るのはその次のクリックになっていた
+    /// （タスクバーが先に手前に来てから窓をアクティブにしたとき。普通は SC_RESTORE がアクティブ化の数ミリ秒後に来る）。
+    /// </summary>
+    private void RestoreIfActivatedWhileMinimized()
+    {
+        if (WindowState != WindowState.Minimized) return;
+        var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            if (WindowState != WindowState.Minimized || !IsActive) return;
+            Core.Logging.Log.Info("Activated while minimized without a restore command; restoring the window");
+            SystemCommands.RestoreWindow(this);
+        };
+        timer.Start();
     }
 
     private void Minimize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;

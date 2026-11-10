@@ -86,6 +86,8 @@ public partial class App : Application
         var window = new MainWindow { DataContext = vm };
         MainWindow = window;
         window.Show();
+        // 画面のスレッドの止まりをログに残す
+        ResponsivenessMonitor.Start(Dispatcher);
         _ = ListenForOtherInstancesAsync(vm, window);
 
         // 前回のワークスペースのタブを復元し、起動引数のリポジトリ（A07）はその後ろに足す。

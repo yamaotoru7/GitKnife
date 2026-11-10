@@ -15,6 +15,7 @@ public partial class DialogWindow : Window
     private DialogWindow(DialogViewModel vm, FrameworkElement body)
     {
         InitializeComponent();
+        WindowFrame.UseRoundCorners(this);
         _vm = vm;
         DataContext = vm;
         body.DataContext = vm;

@@ -7,6 +7,7 @@ public partial class MessageDialog : Window
     public MessageDialog(string title, string message, string submitText, bool showCancel, string? detail = null)
     {
         InitializeComponent();
+        WindowFrame.UseRoundCorners(this);
         Title = title;
         TitleText.Text = title;
         MessageText.Text = message;

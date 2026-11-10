@@ -12,9 +12,11 @@
         WindowStartupLocation="CenterScreen" Icon="/Assets/GitKnife.ico">
     <!--
       メインウィンドウ。
+      GlassFrameThickness を 0 にすると WindowChrome が窓に四角い領域（SetWindowRgn）を付け、Windows 11 の細い枠・角の丸め・影が出ない。
+      0 以外（下だけ 1）にして、枠と影は Windows に描かせる。
     -->
     <WindowChrome.WindowChrome>
-        <WindowChrome CaptionHeight="26" ResizeBorderThickness="4" GlassFrameThickness="0" UseAeroCaptionButtons="False" CornerRadius="0"/>
+        <WindowChrome CaptionHeight="26" ResizeBorderThickness="4" GlassFrameThickness="0,0,0,1" UseAeroCaptionButtons="False" CornerRadius="0"/>
     </WindowChrome.WindowChrome>
 
     <Window.InputBindings>

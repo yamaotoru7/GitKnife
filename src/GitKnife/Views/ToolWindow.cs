@@ -33,7 +33,7 @@ internal abstract class ToolWindow : Window
         Width = width;
         Height = height;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        WindowChrome.SetWindowChrome(this, new WindowChrome { CaptionHeight = 26, ResizeBorderThickness = new Thickness(5), GlassFrameThickness = new Thickness(0), CornerRadius = new CornerRadius(0) });
+        WindowChrome.SetWindowChrome(this, new WindowChrome { CaptionHeight = 26, ResizeBorderThickness = new Thickness(5), GlassFrameThickness = WindowFrame.GlassThickness, CornerRadius = new CornerRadius(0) });
         SetResourceReference(BackgroundProperty, "Gk.ToolWindow.Background");
         SetResourceReference(ForegroundProperty, "Gk.Text");
         SetResourceReference(FontFamilyProperty, "Gk.UiFont");
@@ -76,7 +76,7 @@ internal abstract class ToolWindow : Window
         root.Children.Add(Timeline);
         Grid.SetRow(_body, 3);
         root.Children.Add(_body);
-        Content = new Border { Child = root, BorderThickness = new Thickness(1) }.With(b => b.SetResourceReference(Border.BorderBrushProperty, "Gk.Border"));
+        Content = new Border { Child = root, BorderThickness = new Thickness(0) }.With(b => b.SetResourceReference(Border.BorderBrushProperty, "Gk.Border"));
 
         SourceInitialized += (_, _) => RestoreLocation();
         StateChanged += (_, _) => UpdateButtons();

@@ -45,7 +45,7 @@ internal sealed class RevisionWindow : Window
         Width = 1000;
         Height = 600;
         WindowStartupLocation = WindowStartupLocation.Manual;
-        WindowChrome.SetWindowChrome(this, new WindowChrome { CaptionHeight = 26, ResizeBorderThickness = new Thickness(5), GlassFrameThickness = new Thickness(0), CornerRadius = new CornerRadius(0) });
+        WindowChrome.SetWindowChrome(this, new WindowChrome { CaptionHeight = 26, ResizeBorderThickness = new Thickness(5), GlassFrameThickness = WindowFrame.GlassThickness, CornerRadius = new CornerRadius(0) });
         SetResourceReference(BackgroundProperty, "Gk.Details.Background");
         SetResourceReference(ForegroundProperty, "Gk.Text");
         SetResourceReference(FontFamilyProperty, "Gk.UiFont");
@@ -65,7 +65,7 @@ internal sealed class RevisionWindow : Window
         DockPanel.SetDock(bar, Dock.Top);
         root.Children.Add(bar);
         root.Children.Add(new RevisionDetailsView { IsStandalone = true });
-        Content = new Border { Child = root, BorderThickness = new Thickness(1) }.With(b => b.SetResourceReference(Border.BorderBrushProperty, "Gk.Border"));
+        Content = new Border { Child = root, BorderThickness = new Thickness(0) }.With(b => b.SetResourceReference(Border.BorderBrushProperty, "Gk.Border"));
 
         SourceInitialized += (_, _) => RestoreLocation();
         StateChanged += (_, _) => UpdateButtons();

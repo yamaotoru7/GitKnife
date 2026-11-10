@@ -9,7 +9,7 @@
       ボタンの AutomationId は SubmitButton / CancelButton、右上は PART_CloseButton。
     -->
     <WindowChrome.WindowChrome>
-        <WindowChrome CaptionHeight="30" ResizeBorderThickness="0" GlassFrameThickness="0" CornerRadius="0"/>
+        <WindowChrome CaptionHeight="30" ResizeBorderThickness="0" GlassFrameThickness="0,0,0,1" CornerRadius="0"/>
     </WindowChrome.WindowChrome>
     <Border BorderBrush="{DynamicResource Gk.Border}" BorderThickness="1">
         <Grid>

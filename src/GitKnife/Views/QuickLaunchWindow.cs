@@ -46,7 +46,8 @@ internal sealed class QuickLaunchWindow : Window
         ResizeMode = ResizeMode.NoResize;
         ShowInTaskbar = false;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        WindowChrome.SetWindowChrome(this, new WindowChrome { CaptionHeight = 0, ResizeBorderThickness = new Thickness(0), GlassFrameThickness = new Thickness(0), CornerRadius = new CornerRadius(0) });
+        WindowChrome.SetWindowChrome(this, new WindowChrome { CaptionHeight = 0, ResizeBorderThickness = new Thickness(0), GlassFrameThickness = WindowFrame.GlassThickness, CornerRadius = new CornerRadius(0) });
+        WindowFrame.UseRoundCorners(this);
         SetResourceReference(BackgroundProperty, "Gk.Details.Background");
         SetResourceReference(ForegroundProperty, "Gk.Text");
         SetResourceReference(FontFamilyProperty, "Gk.UiFont");

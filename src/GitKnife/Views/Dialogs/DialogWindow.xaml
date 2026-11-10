@@ -10,7 +10,7 @@
       AutomationId：PART_CloseButton、SubmitButton、CancelButton、BusyIndicator、StatusImage、StatusMessageTextBlock。
     -->
     <WindowChrome.WindowChrome>
-        <WindowChrome CaptionHeight="28" ResizeBorderThickness="0" GlassFrameThickness="0" CornerRadius="0"/>
+        <WindowChrome CaptionHeight="28" ResizeBorderThickness="0" GlassFrameThickness="0,0,0,1" CornerRadius="0"/>
     </WindowChrome.WindowChrome>
     <Border BorderBrush="{DynamicResource Gk.Border}" BorderThickness="1">
         <Grid>

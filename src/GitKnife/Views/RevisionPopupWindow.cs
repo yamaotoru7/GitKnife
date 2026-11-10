@@ -27,7 +27,7 @@ internal sealed class RevisionPopupWindow : Window
         ShowInTaskbar = false;
         ShowActivated = false;   // 開いても一覧のフォーカスはそのまま（開いた直後の Esc や上下キーは一覧に行く）
         WindowStartupLocation = WindowStartupLocation.Manual;
-        WindowChrome.SetWindowChrome(this, new WindowChrome { CaptionHeight = 28, ResizeBorderThickness = new Thickness(5), GlassFrameThickness = new Thickness(0), CornerRadius = new CornerRadius(0) });
+        WindowChrome.SetWindowChrome(this, new WindowChrome { CaptionHeight = 28, ResizeBorderThickness = new Thickness(5), GlassFrameThickness = WindowFrame.GlassThickness, CornerRadius = new CornerRadius(0) });
         SetResourceReference(BackgroundProperty, "Gk.Details.Background");
         SetResourceReference(ForegroundProperty, "Gk.Text");
         SetResourceReference(FontFamilyProperty, "Gk.UiFont");
@@ -60,7 +60,7 @@ internal sealed class RevisionPopupWindow : Window
         root.Children.Add(bar);
 
         root.Children.Add(new RevisionDetailsView { IsStandalone = true });
-        Content = new Border { Child = root, BorderThickness = new Thickness(1) }.With(b => b.SetResourceReference(Border.BorderBrushProperty, "Gk.Border"));
+        Content = new Border { Child = root, BorderThickness = new Thickness(0) }.With(b => b.SetResourceReference(Border.BorderBrushProperty, "Gk.Border"));
 
         InputBindings.Add(new KeyBinding(new RelayAction(Close), Key.Escape, ModifierKeys.None));
         SourceInitialized += (_, _) => RestoreLocation();
