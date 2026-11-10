@@ -169,6 +169,8 @@ public sealed class GitProcess(GitExecutable git, GitHost? host = null)
         var sw = Stopwatch.StartNew();
         using var p = new Process { StartInfo = psi };
         p.Start();
+        // GitKnife が終わったら git とその子（git-remote-https、credential helper）も終わらせる
+        ChildProcessJob.Add(p);
 
         // stdin
         var stdinTask = Task.Run(async () =>

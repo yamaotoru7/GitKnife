@@ -102,10 +102,18 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>開いている全リポジトリのリモートを fetch する（Activity Manager の Background に出す）。</summary>
     private async Task AutoFetchAsync()
     {
-        if (!Settings.FetchRemotesAutomatically) return;
-        foreach (var tab in Tabs.Where(t => !t.IsManager && t.References is not null).ToList())
-            await tab.AutoFetchAsync();
+        // 前の回がまだ終わっていなければ飛ばす（重ねると止まった fetch が 10 分ごとに増える）
+        if (!Settings.FetchRemotesAutomatically || _autoFetching) return;
+        _autoFetching = true;
+        try
+        {
+            foreach (var tab in Tabs.Where(t => !t.IsManager && t.References is not null).ToList())
+                await tab.AutoFetchAsync();
+        }
+        finally { _autoFetching = false; }
     }
+
+    private bool _autoFetching;
 
     /// <summary>ワークスペースの名前や「題名に出す」を変えたとき（ツールバーの Workspaces の文字と窓の題名）。</summary>
     public void NotifyWorkspaceChanged()

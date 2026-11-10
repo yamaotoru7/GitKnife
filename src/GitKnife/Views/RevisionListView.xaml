@@ -16,8 +16,9 @@
         -->
         <DataTemplate x:Key="RefLabelTemplate" DataType="{x:Type vm:RefLabel}">
             <StackPanel Orientation="Horizontal" Margin="0,0,4,0">
+                <!-- マウスを乗せると upstream の名前（origin/main）を出す -->
                 <Border x:Name="SyncChip" CornerRadius="3" BorderThickness="1" Height="17" Width="19" Margin="0,0,3,0" Visibility="Collapsed"
-                        Background="{DynamicResource Gk.List.Background}">
+                        Background="{DynamicResource Gk.List.Background}" ToolTip="{Binding SyncedUpstream}">
                     <Border.BorderBrush>
                         <MultiBinding Converter="{StaticResource Gk.RefLabelBrush}" ConverterParameter="border">
                             <Binding/>

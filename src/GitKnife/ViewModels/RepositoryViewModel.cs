@@ -56,6 +56,12 @@ public sealed partial class RepositoryViewModel : ObservableObject, IRevisionDet
         return false;
     }
 
+    /// <summary>自動 fetch の 1 リモートの上限。これを過ぎたら git を子ごと止める（次の回の自動 fetch の間隔と同じ）。</summary>
+    private static readonly TimeSpan AutoFetchTimeout = TimeSpan.FromMinutes(10);
+
+    /// <summary>自動 fetch では認証の画面を出さない（GCM が OAuth のサインインを待ったまま止まり、10 分ごとの fetch が積み上がった）。</summary>
+    private static readonly IReadOnlyDictionary<string, string> NonInteractiveEnvironment = new Dictionary<string, string> { ["GCM_INTERACTIVE"] = "never" };
+
     /// <summary>自動 fetch（リモートごとに `fetch --prune <remote> --progress`。Background のジョブ。失敗しても知らせない）。</summary>
     public async Task AutoFetchAsync()
     {
@@ -66,13 +72,16 @@ public sealed partial class RepositoryViewModel : ObservableObject, IRevisionDet
             var job = StartJob($"Fetch '{remote}'", background: true);
             using (job.Enter())
             {
+                // ジョブの × と時間切れのどちらでも止まるようにする
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(job.Token);
+                cts.CancelAfter(AutoFetchTimeout);
                 try
                 {
-                    await RunGitAsync(["fetch", "--prune", remote, "--progress"]);
+                    await RunGitAsync(["fetch", "--prune", remote, "--progress"], ct: cts.Token, environment: NonInteractiveEnvironment);
                     job.Finish(true, job.OutputText.Contains("->", StringComparison.Ordinal) ? null : "Already up to date");
                 }
                 catch (GitException ex) { job.Finish(false, ex.Result.StandardError.Trim().Split('\n')[0]); }
-                catch (OperationCanceledException) { job.Finish(false, "Canceled"); }
+                catch (OperationCanceledException) { job.Finish(false, job.Token.IsCancellationRequested ? "Canceled" : "Timed out"); }
             }
         }
         await RefreshAsync();
