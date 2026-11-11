@@ -427,30 +427,6 @@ public sealed partial class RevisionDetailsViewModel(RepositoryViewModel repo, I
         RebuildTreeRows();
     }
 
-    /// <summary>
-    /// File Tree のキー操作（エクスプローラーと同じ）。→：閉じたフォルダは 1 階層だけ開き、開いたフォルダは最初の子へ。
-    /// ←：開いたフォルダは閉じ、それ以外は親のフォルダへ。動いたら true。
-    /// </summary>
-    public bool TreeKey(bool right)
-    {
-        if (SelectedTreeFile is not { } item) return false;
-        if (right)
-        {
-            if (!item.IsFolder) return false;
-            if (!item.IsExpanded) { ToggleTreeFolder(item); return true; }
-            if (item.Children.Count == 0) return false;
-            SelectedTreeFile = item.Children[0];
-            return true;
-        }
-        if (item is { IsFolder: true, IsExpanded: true }) { ToggleTreeFolder(item); return true; }
-        var slash = item.Path.LastIndexOf('/');
-        if (slash < 0) return false;
-        var parentPath = item.Path[..slash];
-        if (TreeRows.FirstOrDefault(r => r.IsFolder && r.Path == parentPath) is not { } parent) return false;
-        SelectedTreeFile = parent;
-        return true;
-    }
-
     partial void OnSelectedTreeFileChanged(FileListItem? value)
     {
         if (_rebuildingTree) return;

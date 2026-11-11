@@ -90,6 +90,14 @@ internal sealed class HistoryWindow : ToolWindow
         _list.SetResourceReference(ForegroundProperty, "Gk.Text");
         _list.SetResourceReference(ItemsControl.ItemContainerStyleProperty, "Gk.HistoryItem");
         ScrollViewer.SetHorizontalScrollBarVisibility(_list, ScrollBarVisibility.Disabled);
+        // ← / → でコミットの行の開閉と親・子へ（フォルダの History）
+        TreeKeys.Attach(_list, row => row switch
+            {
+                HistoryCommitRow c => new(c.Files.Count > 0, c.IsExpanded, 0),
+                HistoryItem { IsSubItem: true } => new(false, false, 1),
+                _ => null,
+            },
+            row => { var c = (HistoryCommitRow)row; c.IsExpanded = !c.IsExpanded; Refill(c); return c; });
         _list.SelectionChanged += async (_, _) => { Timeline.Selected = CommitIndexOf(_list.SelectedItem); await LoadDiffAsync(); };
         Timeline.CommitClicked += (_, i) => _list.SelectedItem = RowOfCommit(i);
         _list.ContextMenu = new ContextMenu();

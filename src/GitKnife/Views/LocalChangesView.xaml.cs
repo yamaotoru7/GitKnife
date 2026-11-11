@@ -36,6 +36,9 @@ public partial class LocalChangesView : UserControl
         // Space で大きな diff
         DiffPopupWindow.Attach(UnstagedList);
         DiffPopupWindow.Attach(StagedList);
+        // ← / → でフォルダの開閉と親・子へ
+        TreeKeys.AttachFiles(UnstagedList, f => _vm?.ToggleExpanded(f));
+        TreeKeys.AttachFiles(StagedList, f => _vm?.ToggleExpanded(f));
         DataContextChanged += (_, e) =>
         {
             if (_vm is not null) { _vm.SelectionRestored -= OnSelectionRestored; _vm.FocusSubjectRequested -= OnFocusSubject; }

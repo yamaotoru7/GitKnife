@@ -12,6 +12,16 @@ public partial class SidebarView : UserControl
     public SidebarView()
     {
         InitializeComponent();
+        // ← / → で節の開閉と親・子へ（ブランチの木と検索結果のコミット）
+        TreeKeys.Attach(Tree, row => row is SidebarItem s ? new(s.ShowExpander, s.IsExpanded, s.Level) : null,
+            row => { Vm?.Sidebar.Toggle((SidebarItem)row); return row; });
+        TreeKeys.Attach(SearchResults, row => row is SearchRow r ? new(r.HasFiles, r.IsExpanded, r.IsFile ? 1 : 0) : null,
+            row =>
+            {
+                var r = (SearchRow)row;
+                Vm?.Search.Toggle(r);   // 行を作り直すので、同じコミットの新しい行を選ぶ
+                return Vm?.Search.Rows.FirstOrDefault(x => !x.IsFile && x.Sha == r.Sha);
+            });
         DataContextChanged += (_, e) =>
         {
             if (e.OldValue is RepositoryViewModel old) old.Sidebar.SelectRequested -= SelectRows;

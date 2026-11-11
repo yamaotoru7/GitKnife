@@ -13,6 +13,9 @@ public partial class RevisionDetailsView : UserControl
     {
         InitializeComponent();
         DiffPopupWindow.Attach(ChangesList);   // Space で大きな diff
+        // ← / → でフォルダの開閉と親・子へ
+        TreeKeys.AttachFiles(ChangesList, f => _details?.ToggleChangeFolder(f));
+        TreeKeys.AttachFiles(FilesTree, f => _details?.ToggleTreeFolder(f));
         DataContextChanged += (_, e) =>
         {
             if (_details is not null) _details.PropertyChanged -= OnDetailsChanged;
@@ -119,20 +122,6 @@ public partial class RevisionDetailsView : UserControl
     private void FileTree_PreviewMouseRightButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
         if ((e.OriginalSource as DependencyObject)?.FindAncestor<ListViewItem>() is { DataContext: FileListItem { IsFolder: true } }) e.Handled = true;
-    }
-
-    /// <summary>File Tree の ← / →：フォルダの開閉と親・子への移動。並べ直した後も選んだ行にフォーカスを置く（続けて矢印キーで動ける）。</summary>
-    private void FileTree_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
-    {
-        if (_details is null || e.Key is not (System.Windows.Input.Key.Left or System.Windows.Input.Key.Right)) return;
-        if (System.Windows.Input.Keyboard.Modifiers != System.Windows.Input.ModifierKeys.None) return;
-        e.Handled = true;
-        if (!_details.TreeKey(e.Key == System.Windows.Input.Key.Right)) return;
-        var list = (ListView)sender;
-        if (list.SelectedItem is not { } item) return;
-        list.ScrollIntoView(item);
-        list.UpdateLayout();
-        (list.ItemContainerGenerator.ContainerFromItem(item) as ListViewItem)?.Focus();
     }
 
     private void OpenFileMenu(ListView list, ContextMenuEventArgs e, bool fileTree)

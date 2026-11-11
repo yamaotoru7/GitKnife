@@ -309,7 +309,7 @@
                     <ColumnDefinition Width="1"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
-                <ListView AutomationProperties.AutomationId="FilesTreeView" ItemsSource="{Binding TreeRows}" SelectedItem="{Binding SelectedTreeFile}" SelectionMode="Single" ContextMenuOpening="FileTree_ContextMenuOpening" PreviewMouseRightButtonDown="FileTree_PreviewMouseRightButtonDown" PreviewKeyDown="FileTree_PreviewKeyDown"
+                <ListView x:Name="FilesTree" AutomationProperties.AutomationId="FilesTreeView" ItemsSource="{Binding TreeRows}" SelectedItem="{Binding SelectedTreeFile}" SelectionMode="Single" ContextMenuOpening="FileTree_ContextMenuOpening" PreviewMouseRightButtonDown="FileTree_PreviewMouseRightButtonDown"
                           Background="{DynamicResource Gk.List.Background}" BorderThickness="0" Padding="0,3" Foreground="{DynamicResource Gk.Text}"
                           ScrollViewer.HorizontalScrollBarVisibility="Disabled" ItemTemplate="{StaticResource Gk.FileRowTemplate}">
                     <ListView.ItemContainerStyle>

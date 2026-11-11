@@ -108,6 +108,15 @@ internal sealed class RepositoryManagerView : UserControl
         _tree.SetResourceReference(ForegroundProperty, "Gk.Text");
         _tree.ItemContainerStyle = RowStyle();
         ScrollViewer.SetHorizontalScrollBarVisibility(_tree, ScrollBarVisibility.Disabled);
+        // ← / → で節とフォルダの開閉と親・子へ（行は Fill で作り直すので、同じキーの新しい行を選ぶ）
+        TreeKeys.Attach(_tree, item => (item as ListViewItem)?.Tag is Row r ? new(r.Expandable, !IsCollapsed(r.Key), r.Level) : null,
+            item =>
+            {
+                var key = ((Row)((ListViewItem)item).Tag).Key;
+                Toggle(key);
+                Fill();
+                return _tree.Items.OfType<ListViewItem>().FirstOrDefault(i => (i.Tag as Row)?.Key == key);
+            });
         _tree.SelectionChanged += async (_, _) => await ShowDetailsAsync();
         _tree.MouseDoubleClick += (_, e) => { if ((_tree.SelectedItem as ListViewItem)?.Tag is Row { Repository: { } r }) Open(r); };
         _tree.ContextMenu = new ContextMenu();

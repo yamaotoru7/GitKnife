@@ -4,7 +4,7 @@
 .DESCRIPTION
   1. 同梱の git を用意する（tools/git/fetch-portable-git.ps1。用意済みなら何もしない）
   2. self-contained で publish する（win-x64、Release → .work/publish）
-  3. Inno Setup 6 の ISCC で installer/GitKnife.iss をコンパイルする（版は Directory.Build.props の <Version>）
+  3. Inno Setup の ISCC（6 か 7。両方あれば 6）で installer/GitKnife.iss をコンパイルする（版は Directory.Build.props の <Version>）
   インストーラは配布先によらず同じもの。配布先（更新とバグ報告の送り先）はダウンロードした場所で決まる（GitKnife.iss の install-source.txt）
 .EXAMPLE
   pwsh tools/installer/build-installer.ps1
@@ -18,13 +18,13 @@ $output = Join-Path $root '.work/installer'
 $gitDir = Join-Path $root 'vendor/portable-git'
 
 if (-not $Iscc) {
-  $Iscc = @(
-    (Join-Path $env:LOCALAPPDATA 'Programs/Inno Setup 6/ISCC.exe'),
-    (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6/ISCC.exe'),
-    (Join-Path $env:ProgramFiles 'Inno Setup 6/ISCC.exe')
-  ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+  $Iscc = @('Inno Setup 6', 'Inno Setup 7') | ForEach-Object {
+    (Join-Path $env:LOCALAPPDATA "Programs/$_/ISCC.exe"),
+    (Join-Path ${env:ProgramFiles(x86)} "$_/ISCC.exe"),
+    (Join-Path $env:ProgramFiles "$_/ISCC.exe")
+  } | Where-Object { Test-Path $_ } | Select-Object -First 1
 }
-if (-not $Iscc) { throw 'ISCC.exe (Inno Setup 6) not found. Pass -Iscc <path>.' }
+if (-not $Iscc) { throw 'ISCC.exe (Inno Setup 6 or 7) not found. Pass -Iscc <path>.' }
 
 & pwsh -NoProfile -File (Join-Path $root 'tools/git/fetch-portable-git.ps1')
 if ($LASTEXITCODE -ne 0) { throw 'fetch-portable-git failed' }
