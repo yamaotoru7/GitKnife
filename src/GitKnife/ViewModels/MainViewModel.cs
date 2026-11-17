@@ -148,7 +148,12 @@ public sealed partial class MainViewModel : ObservableObject
         RememberWorkspace();
         // タブを閉じる間に今のワークスペースのタブ一覧を書き換えないように
         _switchingWorkspace = true;
-        foreach (var t in Tabs.Where(t => !t.IsManager).ToList()) Tabs.Remove(t);
+        foreach (var t in Tabs.Where(t => !t.IsManager).ToList())
+        {
+            // 閉じたタブの見張り（ファイルの監視、WSL・SSH の見張り）を止める
+            t.StopWatching();
+            Tabs.Remove(t);
+        }
         Settings.Workspaces.ActiveWorkspace = name;
         _switchingWorkspace = false;
         NotifyWorkspaceChanged();
@@ -302,6 +307,12 @@ public sealed partial class MainViewModel : ObservableObject
         // タブを選ぶだけでは Quick Launch の Recent の順は変わらない
         RememberWorkspace();
         if (value is not null) LoadIfUnloaded(value);
+    }
+
+    partial void OnSelectedTabChanged(RepositoryViewModel? oldValue, RepositoryViewModel? newValue)
+    {
+        if (oldValue is not null) oldValue.IsActiveTab = false;
+        if (newValue is not null) newValue.IsActiveTab = true;
     }
 
     /// <summary>

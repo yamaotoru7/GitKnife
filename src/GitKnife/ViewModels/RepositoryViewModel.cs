@@ -688,9 +688,13 @@ public sealed partial class RepositoryViewModel : ObservableObject, IRevisionDet
     /// </summary>
     private void StartWatching()
     {
-        if (_watcher is not null || _reader is null) return;
-        // SSH のリポジトリは見張れない（変更は定期の status と窓の復帰で拾う。T1304）
-        if (Core.Git.SshPath.IsSshPath(_reader.WorkingDirectory)) return;
+        if (_watcher is not null || _remoteWatch is not null || _reader is null) return;
+        // WSL と SSH は FileSystemWatcher では見張れない（\\wsl.localhost には Linux 側の変更が通知されない）ので、接続先の中で見張る
+        if (_git.Host is Core.Git.WslGitHost or Core.Git.SshGitHost)
+        {
+            _remoteWatch = Core.Git.RemoteRepositoryWatcher.Watch(_git.Host, _reader.WorkingDirectory, _reader.GitDirectory, _reader.CommonGitDirectory, OnRemoteChange);
+            return;
+        }
         try
         {
             _watcher = new FileSystemWatcher(_reader.WorkingDirectory)
@@ -759,12 +763,50 @@ public sealed partial class RepositoryViewModel : ObservableObject, IRevisionDet
         });
     }
 
+    private Core.Git.RemoteRepositoryWatcher.Registration? _remoteWatch;
+    private volatile bool _isActiveTab;
+    private bool _staleFull;
+    private bool _staleStatus;
+
+    /// <summary>
+    /// WSL・SSH の見張りからの変更の知らせ（別のスレッド）。選んでいるタブはすぐ読み直し、裏のタブは印だけ付けて、選ばれたときに読み直す（<see cref="IsActiveTab"/>）。
+    /// </summary>
+    private void OnRemoteChange(bool full)
+    {
+        if (_isActiveTab) { Schedule(full); return; }
+        lock (this) { _staleFull |= full; _staleStatus = true; }
+    }
+
+    /// <summary>選ばれているタブか（MainViewModel が入れる）。裏にいる間に WSL・SSH で変わっていたら、選ばれたときに読み直す。</summary>
+    public bool IsActiveTab
+    {
+        get => _isActiveTab;
+        set
+        {
+            if (_isActiveTab == value) return;
+            _isActiveTab = value;
+            if (!value) return;
+            bool full, status;
+            lock (this) { full = _staleFull; status = _staleStatus; _staleFull = _staleStatus = false; }
+            if (status) Schedule(full);
+        }
+    }
+
+    /// <summary>
+    /// ウィンドウに切り替えたときに全体を読み直すか。WSL・SSH で、見張りが動いていないとき（起動し直しの途中、接続先に stat などが無い、
+    /// SSH の認証に鍵が使えない）は、参照の変更が届かないので全体を読む。
+    /// </summary>
+    public bool NeedsFullRefreshOnActivate =>
+        _git.Host is Core.Git.WslGitHost or Core.Git.SshGitHost && _remoteWatch?.IsWatching != true;
+
     /// <summary>タブを閉じたとき。</summary>
     public void StopWatching()
     {
         SaveDraft();
         _watcher?.Dispose();
         _watcher = null;
+        _remoteWatch?.Dispose();
+        _remoteWatch = null;
         _debounce?.Dispose();
         _debounce = null;
     }

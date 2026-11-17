@@ -28,7 +28,7 @@ public partial class MainWindow : Window
         };
         Closing += (_, _) => SaveLocation();
         // ウィンドウに戻ったら status を読み直す（外部のエディタで変えた分）
-        // SSH のリポジトリは見張れないので、参照（向こうでの commit や checkout）も含めて読み直す（T1304。常駐のシェルで 0.2 秒ほど）
+        // WSL・SSH のリポジトリで接続先の見張りが動いていないときは、参照（向こうでの commit や checkout）も含めて読み直す（T1304。常駐のシェルで 0.2 秒ほど）
         // タスクバーのボタンで戻すときは、最小化のままアクティブにされてから元に戻す指示（SC_RESTORE）が来る。
         // その間に git を起動すると SC_RESTORE が来なくなり、窓が戻らずに Windows の音が鳴る（一回おきに起きていた）ので、
         // 最小化のままアクティブにされたときは、元に戻ってから読み直す
@@ -198,7 +198,7 @@ public partial class MainWindow : Window
     private void RefreshOnActivated()
     {
         if (Vm.SelectedTab is not { IsManager: false } tab) return;
-        _ = Core.Git.SshPath.IsSshPath(tab.Path) ? tab.RefreshAsync() : tab.RefreshStatusAsync();
+        _ = tab.NeedsFullRefreshOnActivate ? tab.RefreshAsync() : tab.RefreshStatusAsync();
     }
 
     private void Minimize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;

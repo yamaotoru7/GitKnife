@@ -27,6 +27,8 @@ public sealed class RemoteShellSession : IDisposable
         startInfo.StandardOutputEncoding = new UTF8Encoding(false);
         startInfo.StandardErrorEncoding = new UTF8Encoding(false);
         _process = Process.Start(startInfo) ?? throw new InvalidOperationException("could not start the shell");
+        // GitKnife が落ちても ssh を残さない
+        ChildProcessJob.Add(_process);
         _process.StandardInput.AutoFlush = true;
         _process.StandardInput.NewLine = "\n";
         // ssh 自体の stderr（接続の警告など）は読み捨てる（溜まると止まる）

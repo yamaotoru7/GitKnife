@@ -143,6 +143,7 @@ public partial class App : Application
         if (!_isPrimary) { base.OnExit(e); return; }
         try { SettingsStore.Save(Settings); Log.Debug("Saving settings"); }
         catch (Exception ex) { Log.Error($"Saving settings failed: {ex.Message}"); }
+        RemoteRepositoryWatcher.StopAll();   // WSL・SSH の見張り
         SshGitHost.CloseSessions();   // 常駐の ssh（T1307）
         SshAuth.Stop();
         base.OnExit(e);
