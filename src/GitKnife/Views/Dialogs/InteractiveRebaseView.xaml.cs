@@ -21,10 +21,38 @@ public partial class InteractiveRebaseView : UserControl
         => ((Popup)sender).CustomPopupPlacementCallback = (popup, target, _) =>
             [new CustomPopupPlacement(new System.Windows.Point(target.Width - popup.Width - 17, target.Height - 4), PopupPrimaryAxis.Horizontal)];
 
+    /// <summary>
+    /// ドロップダウンで今と同じ Reword を選び直したとき（ComboBox は選択が変わらないと知らせない）も、メッセージの窓を出す。
+    /// 選択が変わるときは MenuSelection から ApplyAction が呼ばれる。
+    /// </summary>
+    private void ActionItem_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (Vm is not { } vm || sender is not ComboBoxItem { DataContext: RebaseActionItem { Action: "reword" } } item) return;
+        if (ItemsControl.ItemsControlFromItemContainer(item) is not ComboBox { DataContext: RebaseStepViewModel { IsReword: true } step }) return;
+        Dispatcher.BeginInvoke(() => vm.OpenReword(step), System.Windows.Threading.DispatcherPriority.Input);
+    }
+
+    /// <summary>行のダブルクリックでメッセージの窓を出す（Pick の行は Reword にする）。動作の欄の上では何もしない。</summary>
+    private void Row_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (Vm is not { } vm || sender is not ListViewItem { DataContext: RebaseStepViewModel step }) return;
+        if ((e.OriginalSource as System.Windows.DependencyObject)?.FindAncestor<ComboBox>() is not null) return;
+        if (vm.OpenReword(step)) e.Handled = true;
+    }
+
     /// <summary>Reword の窓を、その行の下（左は件名の列のあたり）に出す。本文の 72 桁目に縦線。</summary>
     private void RewordLayer_IsVisibleChanged(object sender, System.Windows.DependencyPropertyChangedEventArgs e)
     {
-        if (e.NewValue is not true || Vm is not { RewordStep: { } step }) return;
+        if (e.NewValue is not true) return;
+        // 開いた直後（Quick Actions の Reword...）は行がまだ並んでいないので、並べ終わってから置く
+        Dispatcher.BeginInvoke(PlaceRewordEditor, System.Windows.Threading.DispatcherPriority.Loaded);
+    }
+
+    private void PlaceRewordEditor()
+    {
+        if (Vm is not { RewordStep: { } step }) return;
+        List.ScrollIntoView(step);
+        List.UpdateLayout();
         var y = 30.0;
         if (List.ItemContainerGenerator.ContainerFromItem(step) is ListViewItem row)
             y = row.TranslatePoint(new System.Windows.Point(0, row.ActualHeight), List).Y + 7;

@@ -8,7 +8,7 @@ public sealed record RebasePlanStep(string Action, string Sha);
 
 /// <summary>
 /// Interactive Rebase。git の起動：`-c core.commentChar=^ -c rebase.instructionFormat=#!_%H -c rebase.abbreviateCommands=true
-/// -c sequence.editor=<RI> -c core.editor=<RI> rebase -i --autosquash --update-refs <base>`。
+/// -c sequence.editor=<RI> -c core.editor=<RI> rebase -i --autosquash --update-refs <base>`（最初のコミットも書き換えるときは <base> の代わりに `--root`）。
 ///
 /// UI で先に計画を作り、
 /// GitKnife.RI.exe（sequence.editor）が git の作った todo に計画を当てはめる（パイプは使わない）。
@@ -207,8 +207,11 @@ public static partial class InteractiveRebase
         ["GIT_EDITOR"] = MessageEditor(riPath, messagesDir, host),
     };
 
-    /// <summary>git の起動引数。riPath は GitKnife.RI.exe、planFile と messagesDir は GitKnife が書いた一時ファイル・フォルダ。</summary>
-    public static string[] Arguments(string riPath, string planFile, string messagesDir, string baseSha, GitHost? host = null)
+    /// <summary>
+    /// git の起動引数。riPath は GitKnife.RI.exe、planFile と messagesDir は GitKnife が書いた一時ファイル・フォルダ。
+    /// baseSha が null なら最初のコミットから書き換える（`--root`）。
+    /// </summary>
+    public static string[] Arguments(string riPath, string planFile, string messagesDir, string? baseSha, GitHost? host = null)
     {
         var args = new List<string>
         {
@@ -220,7 +223,7 @@ public static partial class InteractiveRebase
             "rebase", "-i", "--autosquash",
         };
         args.Add("--update-refs");   // 常に付ける（チェックボックスの状態は計画の NoUpdateRefs で）
-        args.Add(baseSha);
+        args.Add(baseSha ?? "--root");
         return [.. args];
     }
 }

@@ -799,13 +799,13 @@ public sealed partial class RepositoryViewModel : ObservableObject, IRevisionDet
         Notification.Update(state, conflicts, References?.HeadSha);
     }
 
-    /// <summary>base より後の、HEAD までの最初の親の列（Interactive Rebase の対象。新しい順）。</summary>
-    public async Task<IReadOnlyList<CommitInfo>> ReadCommitsSinceAsync(string baseSha)
+    /// <summary>base より後の、HEAD までの最初の親の列（Interactive Rebase の対象。新しい順）。baseSha が null なら最初のコミットから。</summary>
+    public async Task<IReadOnlyList<CommitInfo>> ReadCommitsSinceAsync(string? baseSha)
     {
         if (!await EnsureOpenAsync() || References is null) return [];
         return await _reader!.ReadCommitsAsync(new CommitQuery
         {
-            Order = RevisionSortOrder.Topological, FirstParent = true, IncludeStashes = false, OnlyReferences = [$"{baseSha}..HEAD"],
+            Order = RevisionSortOrder.Topological, FirstParent = true, IncludeStashes = false, OnlyReferences = [baseSha is null ? "HEAD" : $"{baseSha}..HEAD"],
         }, References);
     }
 

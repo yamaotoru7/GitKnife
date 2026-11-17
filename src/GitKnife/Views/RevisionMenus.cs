@@ -86,15 +86,15 @@ internal static class RevisionMenus
         if (row.IsReachableFromHead)
         {
             var ir = new MenuItem { Header = "Interactive Rebase" };
-            // 対象のコミット自身も書き換えるので、起点はその親（HEAD のコミットでも同じ）
+            // 対象のコミット自身も書き換えるので、起点はその親（HEAD のコミットでも同じ）。最初のコミットは `--root` で書き換える
             var parent = c.Parents.Count > 0 ? c.Parents[0] : null;
-            void Ir(string? action) => _ = OpenInteractiveRebase(repo, parent, c.Sha, action);
+            void Ir(string? action) => _ = OpenInteractiveRebase(repo, parent, c.Sha, action, root: parent is null);
             Add(ir, $"Interactively Rebase '{head}' to Here...", () => _ = OpenInteractiveRebase(repo, c.Sha, null, null));
             ir.Items.Add(new Separator());
             ir.Items.Add(new MenuItem { Header = "Quick Actions", IsEnabled = false });
             ir.Items.Add(new Separator());
-            Add(ir, "Reword...", () => Ir("reword")).IsEnabled = parent is not null;
-            Add(ir, "Edit...", () => Ir("edit")).IsEnabled = parent is not null;
+            Add(ir, "Reword...", () => Ir("reword"));
+            Add(ir, "Edit...", () => Ir("edit"));
             Add(ir, "Squash into Parent...", () => Ir("squash")).IsEnabled = parent is not null;
             Add(ir, "Fixup into Parent…", () => Ir("fixup")).IsEnabled = parent is not null;
             Add(ir, "Drop…", () => Ir("drop")).IsEnabled = parent is not null;
@@ -136,19 +136,24 @@ internal static class RevisionMenus
 
     /// <summary>
     /// Interactive Rebase のウィンドウを開く。baseSha より後のコミットが対象。Quick Actions は対象のコミット（target）に最初から動作を入れておく
-    /// （squash / fixup は親と合わせるので、起点は親のさらに親）。
+    /// （squash / fixup は親と合わせるので、起点は親のさらに親）。root なら起点なしで最初のコミットから（`git rebase -i --root`）。
     /// </summary>
-    internal static async Task OpenInteractiveRebase(RepositoryViewModel repo, string? baseSha, string? target, string? action)
+    internal static async Task OpenInteractiveRebase(RepositoryViewModel repo, string? baseSha, string? target, string? action, bool root = false)
     {
-        if (baseSha is null) return;
-        if (action is "squash" or "fixup")
+        Core.Git.Model.CommitInfo? @base = null;
+        if (!root)
         {
-            var parent = repo.Commits.FirstOrDefault(r => r.Commit.Sha == baseSha)?.Commit;
-            if (parent?.Parents.Count is not > 0) return;
-            baseSha = parent.Parents[0];
+            if (baseSha is null) return;
+            if (action is "squash" or "fixup")
+            {
+                var parent = repo.Commits.FirstOrDefault(r => r.Commit.Sha == baseSha)?.Commit;
+                if (parent?.Parents.Count is not > 0) return;
+                baseSha = parent.Parents[0];
+            }
+            @base = repo.Commits.FirstOrDefault(r => r.Commit.Sha == baseSha)?.Commit;
+            if (@base is null) return;
         }
-        var @base = repo.Commits.FirstOrDefault(r => r.Commit.Sha == baseSha)?.Commit;
-        if (@base is null) return;
+        else if (action is "squash" or "fixup") return;
         // 窓を先に出すので、変更があれば `git rebase -i` が断るときと同じ条件と同じ文言で先に断る（Git Error）
         var entries = repo.Status?.Entries ?? [];
         var unstaged = entries.Any(e => e.WorkTree is not (Core.Git.Model.FileChange.Unmodified or Core.Git.Model.FileChange.Untracked or Core.Git.Model.FileChange.Ignored));
@@ -159,7 +164,7 @@ internal static class RevisionMenus
             if (unstaged) lines.Add("error: cannot rebase: You have unstaged changes.");
             if (staged) lines.Add(unstaged ? "error: additionally, your index contains uncommitted changes." : "error: cannot rebase: Your index contains uncommitted changes.");
             lines.Add("error: Please commit or stash them.");
-            Alerts.ShowGitError($"git rebase -i --autosquash --update-refs {@base.Sha}", string.Join("\n", lines));
+            Alerts.ShowGitError($"git rebase -i --autosquash --update-refs {@base?.Sha ?? "--root"}", string.Join("\n", lines));
             return;
         }
         await Task.Yield();

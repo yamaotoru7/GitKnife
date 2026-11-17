@@ -97,7 +97,11 @@ public sealed partial class InteractiveRebaseViewModel : DialogViewModel, IRevis
     public override bool ShowHeader => false;
     public override double DialogWidth => 1020;
 
-    public CommitInfo Base { get; }
+    /// <summary>起点のコミット。null なら最初のコミットから書き換える（`git rebase -i --root`）。</summary>
+    public CommitInfo? Base { get; }
+    /// <summary>"On:" の欄（最初のコミットからなら "Root"）。</summary>
+    public string BaseShortSha => Base?.ShortSha ?? "";
+    public string BaseSubject => Base?.Subject ?? "Root";
     public string Branch => _repo.References?.HeadBranch ?? "HEAD";
     public ObservableCollection<RebaseStepViewModel> Steps { get; } = [];
     public IReadOnlyList<RebaseActionItem> Actions => RebaseActionItem.Menu;
@@ -143,6 +147,18 @@ public sealed partial class InteractiveRebaseViewModel : DialogViewModel, IRevis
         RewordStep = step;
     }
 
+    /// <summary>
+    /// 行のメッセージの窓を出す（行のダブルクリック、ドロップダウンで Reword を選び直したとき）。Pick の行は Reword にしてから出す。
+    /// ほかの動作（Edit、Squash、Fixup、Drop）の行では何もしない。
+    /// </summary>
+    public bool OpenReword(RebaseStepViewModel step)
+    {
+        if (step.IsReword) BeginReword(step);
+        else if (step.Action.Action == "pick") ApplyAction([step], RebaseActionItem.Get("reword"));
+        else return false;
+        return true;
+    }
+
     [RelayCommand]
     private void OkReword()
     {
@@ -160,7 +176,7 @@ public sealed partial class InteractiveRebaseViewModel : DialogViewModel, IRevis
     /// <summary>開いたときの並びと動作（Cancel の確認を出すかどうか）。</summary>
     private string _initialState = "";
 
-    public InteractiveRebaseViewModel(RepositoryViewModel repo, CommitInfo @base, string? initialAction = null, string? target = null)
+    public InteractiveRebaseViewModel(RepositoryViewModel repo, CommitInfo? @base, string? initialAction = null, string? target = null)
     {
         _repo = repo;
         Details = new RevisionDetailsViewModel(repo, this);
@@ -172,7 +188,7 @@ public sealed partial class InteractiveRebaseViewModel : DialogViewModel, IRevis
 
     private async Task LoadAsync(string? initialAction, string? target)
     {
-        var commits = await _repo.ReadCommitsSinceAsync(Base.Sha);
+        var commits = await _repo.ReadCommitsSinceAsync(Base?.Sha);
         foreach (var c in commits)
         {
             var action = c.Sha == target && initialAction is not null ? RebaseActionItem.Get(initialAction) : RebaseActionItem.All[0];
@@ -181,6 +197,8 @@ public sealed partial class InteractiveRebaseViewModel : DialogViewModel, IRevis
         SelectedStep = Steps.FirstOrDefault(s => s.Commit.Sha == target) ?? Steps.FirstOrDefault();
         Recompute();
         _initialState = State();
+        // Quick Actions の Reword... は、開いたときからメッセージの窓を出す
+        if (initialAction == "reword" && Steps.FirstOrDefault(s => s.Commit.Sha == target) is { IsReword: true } step) BeginReword(step);
     }
 
     private string State() => string.Join(",", Steps.Select(s => $"{s.Action.Action}:{s.Commit.Sha}:{s.MessageEdited}"));
@@ -311,7 +329,7 @@ public sealed partial class InteractiveRebaseViewModel : DialogViewModel, IRevis
         if (Backup) await _repo.RunGitAsync(["branch", $"backup/{Branch}-{DateTime.Now:yyyyMMdd-HHmmss}", "HEAD"], ct: ct);
 
         var ri = Path.Combine(AppContext.BaseDirectory, "GitKnife.RI.exe");
-        await RunMayConflictAsync(_repo, () => _repo.RunGitAsync(InteractiveRebase.Arguments(ri, planFile, messages, Base.Sha, _repo.Git.Host), Progress, ct,
+        await RunMayConflictAsync(_repo, () => _repo.RunGitAsync(InteractiveRebase.Arguments(ri, planFile, messages, Base?.Sha, _repo.Git.Host), Progress, ct,
             InteractiveRebase.Environment(ri, planFile, messages, _repo.Git.Host)));
     }
 }

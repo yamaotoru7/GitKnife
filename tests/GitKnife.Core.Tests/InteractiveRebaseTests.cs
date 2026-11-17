@@ -93,4 +93,46 @@ public class InteractiveRebaseTests(SandboxFixture sandbox) : IDisposable
         Assert.True(r.Succeeded, r.StandardError);
         Assert.Equal(["Add todo", "Greet the whole world", "Document options"], await Log(3));
     }
+
+    /// <summary>最初のコミット（親なし）は `--root` で起動して reword / edit できる。</summary>
+    [Fact]
+    public async Task RewordsRootCommit()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "gk-ir-root-" + Guid.NewGuid().ToString("N")[..8]);
+        _roots.Add(root);
+        var path = Path.Combine(root, "repo");
+        Directory.CreateDirectory(path);
+        async Task<string> Git(params string[] args)
+        {
+            var r = await sandbox.Git.RunAsync(new GitRequest(path, ["-c", "user.name=T", "-c", "user.email=t@example.com", .. args]));
+            Assert.True(r.Succeeded, r.StandardError);
+            return r.StandardOutput.Trim();
+        }
+        await Git("init", "-q", "-b", "main");
+        await File.WriteAllTextAsync(Path.Combine(path, "a.txt"), "a\n");
+        await Git("add", "-A");
+        await Git("commit", "-q", "-m", "1");
+        await File.WriteAllTextAsync(Path.Combine(path, "b.txt"), "b\n");
+        await Git("add", "-A");
+        await Git("commit", "-q", "-m", "fix");
+        var first = await Git("rev-parse", "HEAD~1");
+        var second = await Git("rev-parse", "HEAD");
+
+        var work = Path.Combine(root, "ir");
+        var messages = Path.Combine(work, "messages");
+        Directory.CreateDirectory(messages);
+        var planFile = Path.Combine(work, "plan.txt");
+        await File.WriteAllTextAsync(planFile, InteractiveRebase.FormatPlan([new("reword", first), new("pick", second)]));
+        await File.WriteAllTextAsync(Path.Combine(messages, first + ".txt"), "Initial commit\n");
+        var ri = Path.Combine(AppContext.BaseDirectory, "GitKnife.RI.exe");
+
+        var args = InteractiveRebase.Arguments(ri, planFile, messages, null);
+        Assert.Equal("--root", args[^1]);
+        var r = await sandbox.Git.RunAsync(new GitRequest(path, ["-c", "user.name=T", "-c", "user.email=t@example.com", .. args])
+        {
+            Environment = InteractiveRebase.Environment(ri, planFile, messages),
+        });
+        Assert.True(r.Succeeded, r.StandardError);
+        Assert.Equal("fix\nInitial commit", await Git("log", "--format=%s"));
+    }
 }

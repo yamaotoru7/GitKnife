@@ -109,6 +109,22 @@ internal sealed class HistoryWindow : ToolWindow
             else if (e.OriginalSource is Button { Tag: "expander", DataContext: HistoryCommitRow row }) { row.IsExpanded = !row.IsExpanded; Refill(row); }
             else if (e.OriginalSource is Button { DataContext: HistoryCommitRow c }) RevisionWindow.OpenCommit(_repo, c.Commit.Sha, c.Author, c.Email, c.Commit.Date, c.Subject);
         }));
+        // 行のダブルクリック：メインの窓の一覧でそのコミットを選び、この窓を閉じる（ボタンの上のダブルクリックは除く）
+        _list.MouseDoubleClick += (_, e) =>
+        {
+            if (e.ChangedButton != System.Windows.Input.MouseButton.Left) return;
+            var source = e.OriginalSource as DependencyObject;
+            if (source?.FindAncestor<Button>() is not null) return;
+            var sha = source?.FindAncestor<ListViewItem>()?.DataContext switch
+            {
+                HistoryItem i => i.Entry.Sha,
+                HistoryCommitRow c => c.Commit.Sha,
+                _ => null,
+            };
+            if (sha is null || !RevealCommit(sha)) return;
+            e.Handled = true;
+            Close();
+        };
         grid.Children.Add(_list);
         var line = new Border();
         line.SetResourceReference(Border.BackgroundProperty, "Gk.Border");
@@ -149,12 +165,7 @@ internal sealed class HistoryWindow : ToolWindow
             return mi;
         }
         Add("Open in Separate Window...", () => RevisionWindow.OpenCommit(_repo, h.Sha, h.Author, h.Email, h.Date, h.Subject));
-        Add("Reveal in GitKnife", () =>
-        {
-            _repo.View = ViewModels.RepositoryView.AllCommits;
-            if (_repo.Commits.FirstOrDefault(c => c.Commit.Sha == h.Sha) is { } row) _repo.SelectedCommit = row;
-            Application.Current.MainWindow?.Activate();
-        });
+        Add("Reveal in GitKnife", () => RevealCommit(h.Sha));
         Add("Open", () => _ = RevisionFileMenus.OpenRevisionFile(_repo, h.Sha, h.Path)).IsEnabled = h.Change != FileChange.Deleted;
         Add("Show in File Explorer", () => RepositoryActions.Explorer(Core.Git.HostFile.Exists(full) ? $"/select,\"{full}\"" : $"\"{_repo.Path}\""));
         m.Items.Add(new Separator());
@@ -169,6 +180,24 @@ internal sealed class HistoryWindow : ToolWindow
         Add("Copy Commit SHA", () => RepositoryActions.Copy(h.Sha));
         Add("Copy Commit Info", () => RepositoryActions.Copy($"{h.ShortSha} {h.Subject}{Environment.NewLine}Author: {h.Author} <{h.Email}>{Environment.NewLine}Date: {h.Date:yyyy-MM-dd HH:mm:ss zzz}"));
         _list.ContextMenu = m;
+    }
+
+    /// <summary>
+    /// メインの窓でこのリポジトリのタブを選び、一覧（All Commits）でそのコミットを選んで手前に出す。
+    /// 一覧に無いコミット（読み込んだ範囲の外など）は何もせず false。
+    /// </summary>
+    private bool RevealCommit(string sha)
+    {
+        if (!_repo.Commits.Any(c => c.Commit.Sha == sha)) return false;
+        var main = Application.Current.MainWindow;
+        if (main?.DataContext is MainViewModel vm && vm.Tabs.Contains(_repo)) vm.SelectedTab = _repo;
+        _repo.NavigateToCommit(sha);
+        if (main is not null)
+        {
+            if (main.WindowState == WindowState.Minimized) main.WindowState = WindowState.Normal;
+            main.Activate();
+        }
+        return true;
     }
 
     /// <summary>古い方と新しい方（一覧で下にある方が古い）。2 つ選んでいないときは null。</summary>

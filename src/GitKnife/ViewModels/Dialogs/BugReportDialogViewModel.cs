@@ -79,33 +79,69 @@ public sealed partial class BugReportDialogViewModel : DialogViewModel
         return b;
     }
 
-    private BugReport Build()
+    /// <summary>今のタブの接続先の git で `git version`（SSH がつながらないときに待ちすぎないよう 5 秒で諦める。取れなければ null）。</summary>
+    private static async Task<string?> GitVersionAsync(Core.Git.GitProcess git, string workingDirectory, CancellationToken ct)
+    {
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(TimeSpan.FromSeconds(5));
+        try
+        {
+            var r = await git.RunAsync(new Core.Git.GitRequest(workingDirectory, ["version"]), cts.Token);
+            var line = r.StandardOutput.Trim();
+            return r.Succeeded && line.Length > 0 ? (line.StartsWith("git version ", StringComparison.Ordinal) ? line["git version ".Length..] : line) : null;
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested) { return null; }
+        catch (Exception ex) when (ex is System.IO.IOException or System.ComponentModel.Win32Exception or InvalidOperationException) { return null; }
+    }
+
+    private async Task<BugReport> BuildAsync(CancellationToken ct)
     {
         var report = new BugReport { Title = IssueTitle.Trim(), Description = Description };
         report.Images.AddRange(Images.Where(i => i.IsSelected).Select(i => i.Image));
         var main = App.Current.MainWindow?.DataContext as MainViewModel;
         var tab = main?.SelectedTab;
-        void Env(string k, string? v) { if (!string.IsNullOrEmpty(v)) report.Environment.Add(new(k, v)); }
+        // パス・ユーザー名・PC の名前・メールアドレスは伏せる（#21）。今のタブのリポジトリが <repository>
+        var repositories = new List<string>();
+        if (tab is { IsManager: false }) repositories.Add(tab.Path);
+        if (main is not null) repositories.AddRange(main.Tabs.Where(t => !t.IsManager).Select(t => t.Path));
+        // ログには前に開いたリポジトリも出るので、ワークスペースと Repository Manager の一覧のものも伏せる
+        repositories.AddRange(App.Settings.Workspaces.All.SelectMany(w => w.Repositories));
+        IReadOnlyList<string> sourceFolders = [];
+        try
+        {
+            var list = Core.Settings.RepositoryList.Load();
+            repositories.AddRange(list.Repositories.Select(r => r.Path));
+            sourceFolders = list.SourceDirectories;
+        }
+        catch (System.IO.IOException) { }
+        var privacy = Core.Reporting.BugReportPrivacy.ForCurrentUser(repositories, sourceFolders);
+        void Env(string k, string? v) { if (!string.IsNullOrEmpty(v)) report.Environment.Add(new(k, privacy.Mask(v))); }
         Env("GitKnife", Core.ProductInfo.Version);
         Env("OS", Environment.OSVersion.VersionString);
         Env(".NET", Environment.Version.ToString());
-        Env("git", main?.Git.Git.Path);
+        // 今のタブの接続先で使う git（WSL と SSH はその場所の git。Windows の git.exe ではない）と版
+        var git = tab is { IsManager: false } ? tab.Git : main?.Git;
+        if (git is not null)
+        {
+            Env("git", Core.Reporting.BugReportPrivacy.GitDescription(git.Host, git.Git.Path));
+            Env("git version", await GitVersionAsync(git, tab is { IsManager: false } ? tab.Path : Environment.CurrentDirectory, ct));
+        }
         Env("Theme", $"{App.Settings.Theme}{(App.Settings.FollowSystemTheme ? " (follow system)" : "")}");
         Env("Window", _activeWindowTitle);
         Env("Workspace", App.Settings.Workspaces.ActiveWorkspace);
         if (tab is { IsManager: false })
         {
-            Env("Repository", tab.Path);
+            Env("Repository", Core.Reporting.BugReportPrivacy.RepositoryKind(tab.Path));
             Env("Branch", tab.CurrentBranchText);
         }
         Env("Time", report.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss zzz"));
-        if (IncludeLog) report.LogTail = BugReport.ReadLogTail(Log.DefaultPath);
+        if (IncludeLog && BugReport.ReadLogTail(Log.DefaultPath) is { } log) report.LogTail = privacy.Mask(log);
         return report;
     }
 
     public override async Task SubmitAsync(CancellationToken ct)
     {
-        var report = Build();
+        var report = await BuildAsync(ct);
         // 送り先の設定は送る前に覚える（送れなくても次に入れ直さなくてよい）
         // 入れたリポジトリは更新の送り先にもなる（同じリポジトリにリリースと Issue がある）。空なら保存だけ
         var s = App.Settings.BugReport;

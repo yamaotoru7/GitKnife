@@ -51,6 +51,7 @@
         </DataTemplate>
 
         <Style x:Key="ActionMenuItemContainer" TargetType="ComboBoxItem">
+            <EventSetter Event="PreviewMouseLeftButtonUp" Handler="ActionItem_PreviewMouseLeftButtonUp"/>
             <Setter Property="Foreground" Value="{DynamicResource Gk.Text}"/>
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="Template">
@@ -116,6 +117,7 @@
 
         <!-- 行：高さ 22、角の丸い選択（窓が手前なら青、そうでなければ灰色） -->
         <Style x:Key="RowStyle" TargetType="ListViewItem">
+            <EventSetter Event="MouseDoubleClick" Handler="Row_MouseDoubleClick"/>
             <Setter Property="Height" Value="22"/>
             <Setter Property="Margin" Value="0"/>
             <Setter Property="Padding" Value="0"/>
@@ -174,8 +176,8 @@
             <StackPanel Orientation="Horizontal" Margin="352,0,0,0">
                 <TextBlock Text="On:" VerticalAlignment="Center" Margin="0,0,13,0"/>
                 <Path Style="{StaticResource Gk.IconPath}" Data="{StaticResource Icon.Commit}" Margin="0,0,7,0"/>
-                <TextBlock Text="{Binding Base.ShortSha}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                <TextBlock Text="{Binding Base.Subject}" VerticalAlignment="Center"/>
+                <TextBlock Text="{Binding BaseShortSha}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <TextBlock Text="{Binding BaseSubject}" VerticalAlignment="Center"/>
                 <CheckBox AutomationProperties.AutomationId="UpdateRefsCheckBox" Content="Update dependent branches" IsChecked="{Binding UpdateRefs}" Margin="30,0,0,0" VerticalAlignment="Center"/>
             </StackPanel>
         </Grid>
