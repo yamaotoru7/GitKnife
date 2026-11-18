@@ -192,6 +192,8 @@ public sealed class AppSettings
     public List<SshHostSettings> SshHosts { get; set; } = [];
     /// <summary>File > Open Repository... で最後に開いた場所（"This PC"、"WSL: …"、"SSH: …"）。次に開いたときの最初の選択。</summary>
     public string OpenRepositoryLocation { get; set; } = "";
+    /// <summary>File > Clone... で最後に clone した場所（Label は <see cref="OpenRepositoryLocation"/> と同じ形）。</summary>
+    public string CloneLocation { get; set; } = "";
 
     /// <summary>モデルにないキー。読んだまま書き戻す。</summary>
     [JsonExtensionData]

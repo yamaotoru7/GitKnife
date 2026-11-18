@@ -548,7 +548,7 @@ public partial class MainWindow : Window
     {
         var parent = Core.Settings.RepositoryList.Load().SourceDirectories.FirstOrDefault(System.IO.Directory.Exists)
                      ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        var vm = new ViewModels.Dialogs.CloneDialogViewModel(Vm.GitFor, parent);
+        var vm = new ViewModels.Dialogs.CloneDialogViewModel(Vm.Settings, Vm.GitFor, parent);
         if (Dialogs.DialogWindow.Run(vm, Dialogs.DialogViews.For(vm))) await Vm.OpenAsync(vm.TargetPath);
     }
 

@@ -582,8 +582,8 @@ internal static class DialogViews
         return dock;
     }
 
-    /// <summary>Open Repository の場所と New Host...（足したらそのホストを選ぶ）。</summary>
-    private static FrameworkElement LocationRow(OpenRepositoryDialogViewModel vm)
+    /// <summary>Open Repository と Clone の場所と New Host...（足したらそのホストを選ぶ）。</summary>
+    private static FrameworkElement LocationRow(HostFolderDialogViewModel vm)
     {
         var add = SideButton("NewHostButton", "New Host...");
         add.Click += (_, _) =>
@@ -604,10 +604,10 @@ internal static class DialogViews
             var dlg = new Microsoft.Win32.OpenFolderDialog { Title = "Select repository", InitialDirectory = vm.BrowseStart };
             var window = Window.GetWindow(browse);
             if (dlg.ShowDialog(window) != true) return;
-            vm.RepositoryPath = dlg.FolderName;
+            vm.FolderPath = dlg.FolderName;
             (window as DialogWindow)?.Submit();
         };
-        return WithSideButton(Text("RemotePathTextBox", "RepositoryPath").Hint("Folder of the repository"), browse);
+        return WithSideButton(Text("RemotePathTextBox", "FolderPath").Hint("Folder of the repository"), browse);
     }
 
     /// <summary>SSH のパスワード欄（PasswordBox は束縛できないので、変わるたびに VM に入れる）。Enter で Connect。</summary>
@@ -650,7 +650,7 @@ internal static class DialogViews
         return test;
     }
 
-    /// <summary>Open Repository（WSL と SSH）：パスの下のフォルダの一覧（選ぶとそのフォルダに入る。先頭の ".." で上へ）。</summary>
+    /// <summary>Open Repository と Clone（WSL と SSH）：パスの下のフォルダの一覧（選ぶとそのフォルダに入る。先頭の ".." で上へ）。</summary>
     private static FrameworkElement RemoteFolders()
     {
         var list = new System.Windows.Controls.ListBox { Height = 160 };
@@ -1041,14 +1041,15 @@ internal static class DialogViews
         status.SetBinding(System.Windows.Controls.TextBlock.TextProperty, new System.Windows.Data.Binding("ConnectionStatus"));
         status.SetResourceReference(System.Windows.Controls.TextBlock.ForegroundProperty, "Gk.Text.Dim");
 
-        var parent = Text("ParentDirectoryTextBox", "ParentFolder");
+        var parent = Text("ParentDirectoryTextBox", "FolderPath");
         var browse = new System.Windows.Controls.Button { Width = 23, Height = 23, Margin = new Thickness(4, 0, 0, 0), Content = new Controls.IconImage { Geometry = Icon("Icon.Folder"), Width = 16, Height = 16 } };
         browse.SetResourceReference(System.Windows.Controls.Control.StyleProperty, "Gk.BrowseButton");
+        // フォルダ選択は This PC だけ（WSL と SSH は下のフォルダの一覧）
+        browse.SetBinding(UIElement.VisibilityProperty, new System.Windows.Data.Binding("IsLocal") { Converter = (System.Windows.Data.IValueConverter)Application.Current.FindResource("Gk.BoolToVisibility") });
         browse.Click += (_, _) =>
         {
-            var dlg = new Microsoft.Win32.OpenFolderDialog { Title = "Select parent folder" };
-            if (System.IO.Directory.Exists(vm.ParentFolder)) dlg.InitialDirectory = vm.ParentFolder;
-            if (dlg.ShowDialog() == true) vm.ParentFolder = dlg.FolderName;
+            var dlg = new Microsoft.Win32.OpenFolderDialog { Title = "Select parent folder", InitialDirectory = vm.BrowseStart };
+            if (dlg.ShowDialog() == true) vm.FolderPath = dlg.FolderName;
         };
         var parentRow = new System.Windows.Controls.DockPanel();
         System.Windows.Controls.DockPanel.SetDock(browse, System.Windows.Controls.Dock.Right);
@@ -1058,7 +1059,9 @@ internal static class DialogViews
         return new Form()
             .Row("Repository Url:", ProtocolUrl(Text("RepositoryUrlTextBox", "Url").Hint("Git Repository Url", "Icon.Link")))
             .Row(null, Horizontal(test, status), 26)
+            .Row("Location:", LocationRow(vm))
             .Row("Parent Folder:", parentRow)
+            .Row(null, RemoteFolders(), 164, visibleWhen: "IsRemote")
             .Row("Name:", Text("RepositoryNameTextBox", "Name").Hint("Repository name"));
     }
 
