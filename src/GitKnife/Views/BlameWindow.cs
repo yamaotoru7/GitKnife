@@ -236,7 +236,7 @@ internal sealed class BlameWindow : ToolWindow
                 dc.DrawLine(pen, new Point(0, y + 0.5), new Point(ColumnWidth - 1, y + 0.5));
                 var top = y + 1;
                 var sha = new FormattedText(b.ShortSha[..6], CultureInfo.InvariantCulture, FlowDirection.LeftToRight, Face(owner, FontWeights.Normal), 12, text, dpi);
-                var date = new FormattedText(b.Time.ToString("d MMM yyyy", CultureInfo.InvariantCulture), CultureInfo.InvariantCulture, FlowDirection.LeftToRight, Face(owner, FontWeights.Normal), 12, text, dpi);
+                var date = new FormattedText(DateFormat.Date(b.Time), CultureInfo.CurrentCulture, FlowDirection.LeftToRight, Face(owner, FontWeights.Normal), 12, text, dpi);
                 var shaX = ColumnWidth - 22 - sha.Width;
                 var dateX = shaX - 10 - date.Width;
                 var summary = new FormattedText(b.Summary, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, Face(owner, FontWeights.Normal), 12.5, text, dpi)

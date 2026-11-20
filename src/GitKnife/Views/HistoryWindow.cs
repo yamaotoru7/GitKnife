@@ -17,7 +17,7 @@ public sealed class HistoryItem(FileHistoryEntry entry, bool isSubItem = false)
     public bool IsSubItem { get; } = isSubItem;
     public string Author => Entry.Author;
     public string Email => Entry.Email;
-    public string Date => Entry.Date.ToString("d MMM yyyy", System.Globalization.CultureInfo.InvariantCulture);
+    public string Date => DateFormat.Date(Entry.Date);
     public string ShortSha => Entry.ShortSha;
     public string Subject => Entry.Subject;
     public string Path => Entry.OldPath is { } old ? $"{old} → {Entry.Path}" : Entry.Path;
@@ -39,7 +39,7 @@ public sealed class HistoryCommitRow(FolderHistoryCommit commit)
     public string Author => Commit.Author;
     public string Email => Commit.Email;
     public string Subject => Commit.Subject;
-    public string Date => Commit.Date.ToString("d MMM yyyy", System.Globalization.CultureInfo.InvariantCulture);
+    public string Date => DateFormat.Date(Commit.Date);
     public bool IsExpanded { get; set; } = true;
     public IReadOnlyList<HistoryItem> Files { get; } = commit.Files.Select(f => new HistoryItem(f, isSubItem: true)).ToList();
 }

@@ -42,12 +42,12 @@ public sealed partial class ActivityJob : ObservableObject
     public bool IsFailed => State == ActivityState.Failed;
     /// <summary>一覧の右の時刻（FinishTimeTextBlock "08:57"）。</summary>
     public string FinishTimeText => (FinishTime ?? StartTime).ToString("HH:mm");
-    /// <summary>詳細の右上（JobDetailsFinishTimeTextBlock "succeeded 25 10 2026 08:57:33"）。</summary>
+    /// <summary>詳細の右上（JobDetailsFinishTimeTextBlock "succeeded 2026/10/25 08:57:33"）。</summary>
     public string FinishText => State switch
     {
         ActivityState.Running => "running",
-        ActivityState.Succeeded => "succeeded " + FinishTime?.ToString("d M yyyy HH:mm:ss"),
-        _ => "failed " + FinishTime?.ToString("d M yyyy HH:mm:ss"),
+        ActivityState.Succeeded => "succeeded " + (FinishTime is { } ok ? DateFormat.DateAndTimeSeconds(ok) : ""),
+        _ => "failed " + (FinishTime is { } ng ? DateFormat.DateAndTimeSeconds(ng) : ""),
     };
 
     /// <summary>

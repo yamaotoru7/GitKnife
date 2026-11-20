@@ -40,9 +40,10 @@ public sealed class CommitRow
         .SelectMany(l => l.SyncedUpstream is { } up ? [l, new RefLabel(up, RefLabelKind.RemoteBranch)] : new[] { l })
         .ToList();
     public bool HasDetailLabels => DetailLabels.Count > 0;
-    public string DateText => Commit.AuthorTime.ToLocalTime().ToString("d M yyyy HH:mm");   // 表示 "5 1 2026 17:10"
-    /// <summary>縦レイアウトの日付（時刻なし "5 1 2026"）。</summary>
-    public string DateOnlyText => Commit.AuthorTime.ToLocalTime().ToString("d M yyyy");
+    /// <summary>"2026/01/05 17:10"（日付は地域設定の短い日付）。</summary>
+    public string DateText => DateFormat.DateAndTime(Commit.AuthorTime);
+    /// <summary>縦レイアウトの日付（時刻なし "2026/01/05"）。</summary>
+    public string DateOnlyText => DateFormat.Date(Commit.AuthorTime);
 
     public static IReadOnlyList<CommitRow> Build(IReadOnlyList<CommitInfo> commits, IReadOnlyList<GraphRow> graph, RepositoryReferences refs, bool hideTags = false, IReadOnlyList<string>? hiddenReferences = null)
     {

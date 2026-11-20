@@ -149,7 +149,7 @@ public sealed partial class SearchRow(RevisionSearchResult result, RevisionSearc
     public string Subject => result.Subject;
     public string AuthorName => result.AuthorName;
     public string AuthorEmail => result.AuthorEmail;
-    public string DateText => result.AuthorTime.ToString("d MMM yyyy", CultureInfo.InvariantCulture);
+    public string DateText => DateFormat.Date(result.AuthorTime);
     public string FilePath => file?.Path ?? "";
     public FileChange Change => file?.Change ?? FileChange.Modified;
     /// <summary>状態の文字（Gk.ChangeBadge の色分けに使う）。</summary>

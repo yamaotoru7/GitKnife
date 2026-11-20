@@ -259,6 +259,23 @@ internal static class RevisionMenus
         return s;
     }
 
+    /// <summary>
+    /// コミット詳細の上の行（作者・SHA・日時・題）の右クリック：Copy Commit Info、---、Copy SHA、Copy Author、Copy Date、Copy Subject。
+    /// </summary>
+    public static ContextMenu ForHeader(CommitRow row)
+    {
+        var m = new ContextMenu();
+        var c = row.Commit;
+        // 行に出ているとおりの 1 行（作者、9 桁の SHA、日時、件名）
+        Add(m, "Copy Commit Info", () => RepositoryActions.Copy($"{c.AuthorName} {c.HeaderSha} {row.DateText} {c.Subject}"));
+        Sep(m);
+        Add(m, "Copy SHA", () => RepositoryActions.Copy(c.Sha));
+        Add(m, "Copy Author", () => RepositoryActions.Copy($"{c.AuthorName} <{c.AuthorEmail}>"));
+        Add(m, "Copy Date", () => RepositoryActions.Copy($"{c.AuthorTime:yyyy-MM-dd HH:mm:ss zzz}"));
+        Add(m, "Copy Subject", () => RepositoryActions.Copy(c.Subject));
+        return m;
+    }
+
     private static MenuItem Add(ItemsControl parent, string header, Action action)
     {
         var mi = new MenuItem { Header = new AccessText { Text = header.Replace("_", "__") } };

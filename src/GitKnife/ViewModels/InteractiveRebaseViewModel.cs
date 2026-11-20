@@ -80,8 +80,8 @@ public sealed partial class RebaseStepViewModel(InteractiveRebaseViewModel owner
         }
     }
 
-    /// <summary>"5 Jan 2026 16:33"（Interactive Rebase の日付の書式）。</summary>
-    public string DateText => Commit.AuthorTime.ToLocalTime().ToString("d MMM yyyy HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+    /// <summary>"2026/01/05 16:33"。</summary>
+    public string DateText => DateFormat.DateAndTime(Commit.AuthorTime);
 }
 
 /// <summary>

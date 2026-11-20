@@ -124,6 +124,19 @@ public partial class RevisionDetailsView : UserControl
         if ((e.OriginalSource as DependencyObject)?.FindAncestor<ListViewItem>() is { DataContext: FileListItem { IsFolder: true } }) e.Handled = true;
     }
 
+    /// <summary>上の行（作者・SHA・日時・題）の右クリック：コミットの情報をクリップボードに写す。</summary>
+    private void Header_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: CommitRow row } panel) { e.Handled = true; return; }
+        var menu = RevisionMenus.ForHeader(row);
+        // ContextMenu を差し替えると最初の 1 回は開かない。今の ContextMenu の中身を入れ替える
+        var target = panel.ContextMenu ??= new ContextMenu();
+        target.Items.Clear();
+        var items = menu.Items.Cast<object>().ToList();
+        menu.Items.Clear();
+        foreach (var item in items) target.Items.Add(item);
+    }
+
     private void OpenFileMenu(ListView list, ContextMenuEventArgs e, bool fileTree)
     {
         if (_details is null || (e.OriginalSource as DependencyObject)?.FindAncestor<ListViewItem>() is not { DataContext: FileListItem row }) { e.Handled = true; return; }

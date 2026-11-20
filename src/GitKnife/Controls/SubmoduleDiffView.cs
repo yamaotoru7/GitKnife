@@ -112,7 +112,7 @@ internal sealed class SubmoduleDiffView : UserControl
     }
 
     private static string Date(string unix)
-        => long.TryParse(unix, out var t) ? DateTimeOffset.FromUnixTimeSeconds(t).ToLocalTime().ToString("d M yyyy HH:mm") : "";
+        => long.TryParse(unix, out var t) ? DateFormat.DateAndTime(DateTimeOffset.FromUnixTimeSeconds(t)) : "";
 
     private static TextBlock Text(string text, bool bold = false, double size = 13, double margin = 6)
     {

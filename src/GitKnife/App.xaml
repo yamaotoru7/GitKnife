@@ -16,6 +16,7 @@
 
             <local:PositiveToVisibilityConverter x:Key="Gk.PositiveToVisibility"/>
             <local:BoolToVisibilityConverter x:Key="Gk.BoolToVisibility"/>
+            <local:DateTextConverter x:Key="Gk.DateText"/>
             <local:NotEmptyToVisibilityConverter x:Key="Gk.NotEmptyToVisibility"/>
             <local:EnumEqualsConverter x:Key="Gk.EnumEquals"/>
             <local:EnumToCollapsedConverter x:Key="Gk.EnumToCollapsed"/>

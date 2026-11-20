@@ -62,7 +62,7 @@
                             <TextBlock AutomationProperties.AutomationId="AuthorTextBlock" Text="{Binding Commit.AuthorName}" FontWeight="SemiBold" FontSize="13"/>
                             <TextBlock AutomationProperties.AutomationId="AuthorEmailTextBlock" Text="{Binding Commit.AuthorEmail}" Foreground="{DynamicResource Gk.Text.Dim}" Margin="8,1,0,0"/>
                         </StackPanel>
-                        <TextBlock AutomationProperties.AutomationId="AuthorDateTextBlock" Text="{Binding Commit.AuthorTime, StringFormat='d M yyyy HH:mm:ss zzz'}" Foreground="{DynamicResource Gk.Text.Dim}" FontSize="11" Margin="0,6,0,0"/>
+                        <TextBlock AutomationProperties.AutomationId="AuthorDateTextBlock" Text="{Binding Commit.AuthorTime, Converter={StaticResource Gk.DateText}, ConverterParameter=offset}" Foreground="{DynamicResource Gk.Text.Dim}" FontSize="11" Margin="0,6,0,0"/>
                     </StackPanel>
                     <!-- COMMITTER：作者と人か日時が違うとき、幅の右半分に AUTHOR と同じ形で並べる（rebase したコミットなど） -->
                     <Grid Grid.ColumnSpan="2" Grid.RowSpan="2" Visibility="{Binding Commit.HasDistinctCommitter, Converter={StaticResource Gk.BoolToVisibility}}">
@@ -87,7 +87,7 @@
                                 <TextBlock AutomationProperties.AutomationId="CommitterTextBlock" Text="{Binding Commit.CommitterName}" FontWeight="SemiBold" FontSize="13"/>
                                 <TextBlock AutomationProperties.AutomationId="CommitterEmailTextBlock" Text="{Binding Commit.CommitterEmail}" Foreground="{DynamicResource Gk.Text.Dim}" Margin="8,1,0,0"/>
                             </StackPanel>
-                            <TextBlock AutomationProperties.AutomationId="CommitterDateTextBlock" Text="{Binding Commit.CommitTime, StringFormat='d M yyyy HH:mm:ss zzz'}" Foreground="{DynamicResource Gk.Text.Dim}" FontSize="11" Margin="0,6,0,0"/>
+                            <TextBlock AutomationProperties.AutomationId="CommitterDateTextBlock" Text="{Binding Commit.CommitTime, Converter={StaticResource Gk.DateText}, ConverterParameter=offset}" Foreground="{DynamicResource Gk.Text.Dim}" FontSize="11" Margin="0,6,0,0"/>
                         </StackPanel>
                     </Grid>
                     </Grid>
@@ -204,7 +204,8 @@
             <Border BorderBrush="{DynamicResource Gk.Splitter}" BorderThickness="0,0,0,1" Padding="8,0">
                 <Grid>
                 <StackPanel>
-                <StackPanel Orientation="Horizontal" DataContext="{Binding Commit}" Height="23">
+                <StackPanel Orientation="Horizontal" DataContext="{Binding Commit}" Height="23" Background="Transparent" ContextMenuOpening="Header_ContextMenuOpening">
+                    <StackPanel.ContextMenu><ContextMenu/></StackPanel.ContextMenu>
                     <c:Avatar Width="18" Height="18" NameText="{Binding Commit.AuthorName}" Email="{Binding Commit.AuthorEmail}" Margin="0,0,10,0" AutomationProperties.AutomationId="AuthorAvatarImage"/>
                     <TextBlock AutomationProperties.AutomationId="AuthorTextBlock" Text="{Binding Commit.AuthorName}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,0"/>
                     <!-- 比べているときは古い方の SHA を赤、新しい方を緑の地にする -->
@@ -223,8 +224,9 @@
                     <TextBlock AutomationProperties.AutomationId="OtherCustomTextBlock" Text="Local Changes" FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center"/>
                     <TextBlock Text=" ↩" Foreground="{DynamicResource Gk.Text.Dim}" VerticalAlignment="Center"/>
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" DataContext="{Binding Other}" Height="23"
+                <StackPanel Orientation="Horizontal" DataContext="{Binding Other}" Height="23" Background="Transparent" ContextMenuOpening="Header_ContextMenuOpening"
                             Visibility="{Binding DataContext.CanSwap, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Gk.BoolToVisibility}}">
+                    <StackPanel.ContextMenu><ContextMenu/></StackPanel.ContextMenu>
                     <c:Avatar Width="18" Height="18" NameText="{Binding Commit.AuthorName}" Email="{Binding Commit.AuthorEmail}" Margin="0,0,10,0" AutomationProperties.AutomationId="OtherAuthorAvatarImage"/>
                     <TextBlock AutomationProperties.AutomationId="OtherAuthorTextBlock" Text="{Binding Commit.AuthorName}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,0"/>
                     <Border VerticalAlignment="Center" Margin="0,0,8,0" CornerRadius="2" Padding="2,0" Background="{DynamicResource Gk.Diff.Added}">
