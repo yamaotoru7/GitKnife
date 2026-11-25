@@ -205,7 +205,7 @@ public sealed partial class CreatePatchDialogViewModel : DialogViewModel
             FileName = DefaultFileName,
             DefaultExt = ".patch",
             Filter = "Patches (*.patch)|*.patch",
-            InitialDirectory = _repo.Settings.RecentPatchDirectory is { } d && Core.Git.HostDirectory.Exists(d) ? d : null,
+            InitialDirectory = Views.FileDialogs.ExistingLocalDirectory(_repo.Settings.RecentPatchDirectory),
         };
         if (dlg.ShowDialog() != true) throw new OperationCanceledException();
         _repo.Settings.RecentPatchDirectory = Path.GetDirectoryName(dlg.FileName);
@@ -344,7 +344,9 @@ public sealed partial class ApplyPatchDialogViewModel : DialogViewModel
     public override string SubmitText => "Apply";
     public override double DialogWidth => 590;
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(CanSubmit), nameof(CanSubmitNow))] private string _path;
-    public override bool CanSubmit => Core.Git.HostFile.Exists(Path.Trim());
+    /// <summary>ファイルがあるか（入力が変わるたびに UI のスレッドの外で確かめる。確かめるまでは押せない）。</summary>
+    public override bool CanSubmit => _fileExists;
+    private bool _fileExists;
 
     [ObservableProperty] private bool _createCommit;
     [ObservableProperty] private bool _isMailPatch;
@@ -367,12 +369,22 @@ public sealed partial class ApplyPatchDialogViewModel : DialogViewModel
         _check?.Cancel();
         var cts = _check = new CancellationTokenSource();
         StatusMessage = null;
-        IsMailPatch = Core.Git.HostFile.Exists(Path.Trim()) && LooksLikeMailPatch(Path.Trim());
-        if (!IsMailPatch) CreateCommit = false;
-        if (!Core.Git.HostFile.Exists(Path.Trim())) return;
+        SetFileExists(false);
+        var path = Path.Trim();
         try
         {
+            // 打っている間は確かめない
             await Task.Delay(150, cts.Token);
+            var (exists, mail) = await Core.Git.HostIO.RunAsync(() =>
+            {
+                var e = path.Length > 0 && Core.Git.HostFile.Exists(path);
+                return (e, e && LooksLikeMailPatch(path));
+            }, cts.Token);
+            if (cts.IsCancellationRequested) return;
+            SetFileExists(exists);
+            IsMailPatch = mail;
+            if (!mail) CreateCommit = false;
+            if (!exists) return;
             var r = await _repo.Git.RunAsync(new Core.Git.GitRequest(_repo.Path, ["apply", "--check", Path.Trim()]), cts.Token);
             if (cts.IsCancellationRequested) return;
             StatusIsWarning = !r.Succeeded;
@@ -380,6 +392,15 @@ public sealed partial class ApplyPatchDialogViewModel : DialogViewModel
             StatusMessage = r.Succeeded ? "Patch can be applied without conflicts" : r.StandardError.Replace("\r", "").Split('\n').FirstOrDefault(l => l.Trim().Length > 0)?.Trim();
         }
         catch (OperationCanceledException) { }
+        catch (IOException ex) { Core.Logging.Log.Warning($"Checking the patch failed: {ex.Message}"); }
+    }
+
+    private void SetFileExists(bool value)
+    {
+        if (_fileExists == value) return;
+        _fileExists = value;
+        OnPropertyChanged(nameof(CanSubmit));
+        OnPropertyChanged(nameof(CanSubmitNow));
     }
 
     public override async Task SubmitAsync(CancellationToken ct)

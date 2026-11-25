@@ -204,6 +204,9 @@ public static class SshAskPass
     /// </summary>
     public static Action? WhileWaiting { get; set; }
 
+    /// <summary>今のスレッドが UI のスレッドか（アプリが入れる。接続先のシェルを UI のスレッドから呼んだら警告を書くため）。</summary>
+    public static Func<bool>? IsUiThread { get; set; }
+
     public static bool Enabled => Broker is not null && HelperPath is not null && File.Exists(HelperPath);
 
     /// <summary>ssh の -o（接続先の前に置く）。</summary>
@@ -219,12 +222,18 @@ public static class SshAskPass
         psi.Environment[AskPassProtocol.SessionVariable] = Broker.RegisterSession(destination);
     }
 
+    /// <summary>ssh の接続待ちの上限（秒）。</summary>
+    public const int ConnectTimeoutSeconds = 10;
+
     /// <summary>ssh の起動の引数（-T、-o …、接続先、コマンド）。</summary>
     public static ProcessStartInfo StartInfo(string destination, IEnumerable<string> options, IEnumerable<string> command)
     {
         var psi = new ProcessStartInfo(SshGitHost.SshExe) { WorkingDirectory = Environment.SystemDirectory };
         psi.ArgumentList.Add("-T");
         foreach (var o in Options.Concat(options)) psi.ArgumentList.Add(o);
+        // 届かない接続先で TCP の接続待ち（既定は OS 任せで 20 秒以上）を長引かせない。先に書いた -o が勝つので、呼んだ側の指定が優先
+        psi.ArgumentList.Add("-o");
+        psi.ArgumentList.Add("ConnectTimeout=" + ConnectTimeoutSeconds);
         psi.ArgumentList.Add(destination);
         foreach (var c in command) psi.ArgumentList.Add(c);
         Apply(psi, destination);

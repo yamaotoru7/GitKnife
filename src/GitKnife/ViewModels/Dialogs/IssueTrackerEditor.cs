@@ -14,11 +14,12 @@ public sealed partial class IssueTrackerEditorViewModel : ObservableObject
     private readonly string _gitDirectory;
     private readonly string _worktree;
 
-    public IssueTrackerEditorViewModel(string worktree, string gitDirectory)
+    /// <param name="rules">読んでおいたルール（<see cref="IssueTracker.Load"/>。SSH の先では UI のスレッドの外で読む）。</param>
+    public IssueTrackerEditorViewModel(string worktree, string gitDirectory, IEnumerable<IssueTrackerRule> rules)
     {
         _worktree = worktree;
         _gitDirectory = gitDirectory;
-        foreach (var r in IssueTracker.Load(gitDirectory, worktree)) Rules.Add(new IssueRuleItemViewModel(r, this));
+        foreach (var r in rules) Rules.Add(new IssueRuleItemViewModel(r, this));
         Selected = Rules.FirstOrDefault();
     }
 
@@ -47,10 +48,19 @@ public sealed partial class IssueTrackerEditorViewModel : ObservableObject
     }
 
     /// <summary>閉じたとき（Local は .git/issuetracker、Shared は .issuetracker。完成したルールだけ書く）。</summary>
-    public void Save()
+    public void Save() => CreateSave()();
+
+    /// <summary>書き込み（今のルールを取っておき、書くのは返した処理。SSH の先では UI のスレッドの外で動かす）。</summary>
+    public Action CreateSave()
     {
-        try { IssueTracker.Save(_gitDirectory, _worktree, Rules.Select(r => r.ToRule())); }
-        catch (System.IO.IOException ex) { Core.Logging.Log.Warning($"Saving issue tracker rules failed: {ex.Message}"); }
+        var rules = Rules.Select(r => r.ToRule()).ToList();
+        var gitDirectory = _gitDirectory;
+        var worktree = _worktree;
+        return () =>
+        {
+            try { IssueTracker.Save(gitDirectory, worktree, rules); }
+            catch (System.IO.IOException ex) { Core.Logging.Log.Warning($"Saving issue tracker rules failed: {ex.Message}"); }
+        };
     }
 
     internal void RaisePreview() => OnPropertyChanged(nameof(TestMessage));

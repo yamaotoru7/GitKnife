@@ -121,12 +121,26 @@ public static class RepositoryActions
     /// <summary>Repository > Settings for This Repository...（閉じたら名前・メール・テンプレートを書く）。</summary>
     public static async void RepositorySettings(RepositoryViewModel repo)
     {
-        var vm = new RepositorySettingsViewModel(repo);
+        RepositorySettingsViewModel vm;
+        try { vm = await RepositorySettingsViewModel.CreateAsync(repo); }
+        catch (OperationCanceledException) { return; }
+        catch (System.IO.IOException ex) { Alerts.ShowGitError("Repository Settings", ex.Message); return; }
         DialogWindow.Run(vm, DialogViews.For(vm));
-        vm.CustomCommands.Save();
-        vm.IssueRules.Save();
-        try { await vm.SaveAsync(); }
+        var saveCommands = vm.CustomCommands.CreateSave();
+        var saveRules = vm.IssueRules.CreateSave();
+        try
+        {
+            await Busy.RunAsync(null, "Saving repository settings...", async ct =>
+            {
+                await Core.Git.HostIO.RunAsync(() => { saveCommands(); saveRules(); }, ct);
+                await vm.FlushConfigAsync().WaitAsync(ct);
+                await vm.SaveAsync();
+            });
+        }
         catch (Core.Git.GitException ex) { Alerts.ShowGitError(ex.Result.CommandLine, ex.Result.StandardError); }
+        catch (System.IO.IOException ex) { Alerts.ShowGitError("Repository Settings", ex.Message); }
+        catch (OperationCanceledException) { }
+        await repo.RefreshAsync();
     }
 
     /// <summary>New Worktree...（Create Worktree ダイアログ。作ったら新しいタブで開く）。</summary>
@@ -246,6 +260,16 @@ public static class RepositoryActions
 
     /// <summary>Open In Console（Windows Terminal があればそれ、なければ cmd）。</summary>
     /// <summary>エクスプローラーを開く。SSH のリポジトリ（\gitknife-ssh\…）はエクスプローラーで開けないので知らせるだけ（T1306）。</summary>
+    /// <summary>
+    /// File Explorer でファイル・フォルダを選んで見せる（無ければ fallbackFolder を開く）。SSH の先は開けないので案内だけ出す
+    /// （あるかどうかを確かめに接続先へ行かない。UI のスレッドで待たないため）。
+    /// </summary>
+    public static void RevealInExplorer(string path, string fallbackFolder)
+    {
+        if (Core.Git.SshPath.IsSshPath(path)) { Explorer($"\"{path}\""); return; }
+        Explorer(System.IO.File.Exists(path) || System.IO.Directory.Exists(path) ? $"/select,\"{path}\"" : $"\"{fallbackFolder}\"");
+    }
+
     public static void Explorer(string arguments)
     {
         if (arguments.Contains(Core.Git.SshPath.Server, StringComparison.OrdinalIgnoreCase))

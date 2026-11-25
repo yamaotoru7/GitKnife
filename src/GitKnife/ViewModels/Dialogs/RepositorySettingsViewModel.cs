@@ -28,12 +28,28 @@ public sealed partial class RepositorySettingsViewModel : DialogViewModel
     public CustomCommandsEditorViewModel CustomCommands { get; }
     public IssueTrackerEditorViewModel IssueRules { get; }
 
-    public RepositorySettingsViewModel(RepositoryViewModel repo)
+    /// <summary>開く前に読む設定（config.toml、カスタムコマンド、Issue Tracker のルール）。</summary>
+    public sealed record Loaded(RepositoryConfig Config, CustomCommandsEditorViewModel.RepositoryCommands Commands, IReadOnlyList<IssueTrackerRule> Rules);
+
+    /// <summary>設定を読んでから作る（SSH の先では往復があるので、読む間は UI のスレッドを止めず <see cref="Busy"/> を出す）。</summary>
+    public static async Task<RepositorySettingsViewModel> CreateAsync(RepositoryViewModel repo)
+    {
+        var path = repo.Path;
+        var common = repo.CommonGitDirectory ?? Path.Combine(repo.Path, ".git");
+        var loaded = await Busy.IoAsync(null, "Loading repository settings...", () => new Loaded(
+            RepositoryConfig.Load(common),
+            CustomCommandsEditorViewModel.LoadRepository(path, common),
+            IssueTracker.Load(common, path)));
+        return new RepositorySettingsViewModel(repo, loaded);
+    }
+
+    private RepositorySettingsViewModel(RepositoryViewModel repo, Loaded loaded)
     {
         _repo = repo;
-        _config = RepositoryConfig.Load(repo.CommonGitDirectory ?? Path.Combine(repo.Path, ".git"));
-        CustomCommands = new CustomCommandsEditorViewModel(repo.Path, repo.CommonGitDirectory ?? Path.Combine(repo.Path, ".git"));
-        IssueRules = new IssueTrackerEditorViewModel(repo.Path, repo.CommonGitDirectory ?? Path.Combine(repo.Path, ".git"));
+        var common = repo.CommonGitDirectory ?? Path.Combine(repo.Path, ".git");
+        _config = loaded.Config;
+        CustomCommands = new CustomCommandsEditorViewModel(repo.Path, loaded.Commands);
+        IssueRules = new IssueTrackerEditorViewModel(repo.Path, common, loaded.Rules);
         _config.EnsureDefaults();
         _tabWidth = _config.TabWidth;
         _noFastForward = _config.LeanBranchingNoFastForward;
@@ -163,8 +179,13 @@ public sealed partial class RepositorySettingsViewModel : DialogViewModel
         }
         if (!UseGlobalTemplate && TemplatePath.Length > 0 && TemplateText != _loadedTemplate)
         {
-            Core.Git.HostDirectory.CreateDirectory(Path.GetDirectoryName(TemplatePath)!);
-            await Core.Git.HostFile.WriteAllTextAsync(TemplatePath, TemplateText.Replace("\r\n", "\n"));
+            var path = TemplatePath;
+            var text = TemplateText.Replace("\r\n", "\n");
+            await HostIO.RunAsync(() =>
+            {
+                HostDirectory.CreateDirectory(Path.GetDirectoryName(path)!);
+                HostFile.WriteAllText(path, text);
+            });
         }
     }
 
@@ -172,7 +193,7 @@ public sealed partial class RepositorySettingsViewModel : DialogViewModel
     {
         TemplatePath = path.Replace('\\', '/');
         var full = path.StartsWith('~') ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), path[1..].TrimStart('/', '\\')) : path;
-        TemplateText = full.Length > 0 && Core.Git.HostFile.Exists(full) ? await Core.Git.HostFile.ReadAllTextAsync(full) : "";
+        TemplateText = full.Length == 0 ? "" : await HostIO.RunAsync(() => HostFile.Exists(full) ? HostFile.ReadAllText(full) : "");
     }
 
     private async Task<string> ConfigAsync(string key, bool local = false)
@@ -187,10 +208,21 @@ public sealed partial class RepositorySettingsViewModel : DialogViewModel
         catch (GitException ex) when (ex.Result.ExitCode == 5) { }   // もともと無い
     }
 
+    /// <summary>config.toml を変えて書く（UI のスレッドの外で、順に）。</summary>
     private void SaveConfig(Action<RepositoryConfig> change)
     {
-        change(_config);
-        try { _config.Save(); }
-        catch (IOException ex) { Core.Logging.Log.Warning($"Saving repository config failed: {ex.Message}"); }
+        _configSaves = _configSaves.ContinueWith(_ =>
+        {
+            try
+            {
+                change(_config);
+                _config.Save();
+            }
+            catch (IOException ex) { Core.Logging.Log.Warning($"Saving repository config failed: {ex.Message}"); }
+        }, TaskScheduler.Default);
     }
+    private Task _configSaves = Task.CompletedTask;
+
+    /// <summary>並んでいる config.toml の書き込みが終わるまで待つ。</summary>
+    public Task FlushConfigAsync() => _configSaves;
 }

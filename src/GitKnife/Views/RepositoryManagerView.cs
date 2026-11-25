@@ -148,7 +148,10 @@ internal sealed class RepositoryManagerView : UserControl
         e.Handled = true;   // メインウィンドウの Drop（タブで開く）に渡さない
         if (Main is not { } main || e.Data.GetData(DataFormats.FileDrop) is not string[] paths) return;
         string? added = null;
-        foreach (var path in paths.Where(Core.Git.HostDirectory.Exists))
+        List<string> folders;
+        try { folders = await Busy.IoAsync(this, "Checking folders...", () => paths.Where(Core.Git.HostDirectory.Exists).ToList()); }
+        catch (OperationCanceledException) { return; }
+        foreach (var path in folders)
         {
             var git = main.GitFor(path);
             var top = await git.RunAsync(new GitRequest(path, ["rev-parse", "--show-toplevel"]));
@@ -182,6 +185,36 @@ internal sealed class RepositoryManagerView : UserControl
         var select = _tree.Items.Cast<ListViewItem>().FirstOrDefault(i => (i.Tag as Row)?.Key == selectedKey)
                      ?? _tree.Items.Cast<ListViewItem>().FirstOrDefault(i => (i.Tag as Row)?.Repository is not null);
         _tree.SelectedItem = select;
+        _ = CheckMissingAsync(repos.Select(r => r.Path).ToList());
+    }
+
+    /// <summary>フォルダが無いリポジトリ（最後に確かめた結果。Fill はこれで印を付ける）。</summary>
+    private readonly HashSet<string> _missing = new(StringComparer.OrdinalIgnoreCase);
+    private bool _checkingMissing;
+
+    /// <summary>
+    /// リポジトリのフォルダがあるかを UI のスレッドの外で確かめ、変わっていたら一覧を作り直す
+    /// （SSH の先は往復があり、接続できないと長く待つので、一覧を作るときには待たない）。
+    /// </summary>
+    private async Task CheckMissingAsync(IReadOnlyList<string> paths)
+    {
+        if (_checkingMissing || paths.Count == 0) return;
+        _checkingMissing = true;
+        try
+        {
+            var exists = await Core.Git.HostIO.RunAsync(() => Core.Git.HostDirectory.ExistsMany(paths));
+            var missing = exists.Where(kv => !kv.Value).Select(kv => kv.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if (missing.SetEquals(_missing)) return;
+            _missing.Clear();
+            _missing.UnionWith(missing);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Core.Logging.Log.Warning($"Checking repository folders failed: {ex.Message}");
+            return;
+        }
+        finally { _checkingMissing = false; }
+        Fill();
     }
 
     /// <summary>フォルダの中身：フォルダを先に、名前順（大文字小文字を区別しない。RepositoryTree が並べてある）。</summary>
@@ -210,7 +243,7 @@ internal sealed class RepositoryManagerView : UserControl
         {
             var icon = new IconImage { Geometry = (Geometry)FindResource(row.IsFolder ? "Icon.Folder" : "Icon.Repository") };
             // フォルダが無いリポジトリは薄いアイコンの右下に黄色の三角
-            if (row.Repository is { } missing && !Core.Git.HostDirectory.Exists(missing.Path))
+            if (row.Repository is { } missing && _missing.Contains(missing.Path))
             {
                 icon.Opacity = 0.6;
                 var warn = new System.Windows.Shapes.Path
@@ -390,7 +423,14 @@ internal sealed class RepositoryManagerView : UserControl
     private async Task ShowDetailsAsync()
     {
         if ((_tree.SelectedItem as ListViewItem)?.Tag is not Row { Repository: { } repo }) { _details.Content = null; return; }
-        if (!Core.Git.HostDirectory.Exists(repo.Path)) { _details.Content = NotFound(repo); return; }
+        // フォルダがあるかは UI のスレッドの外で確かめる（1 秒を過ぎたら「読み込み中」を出す）
+        var check = Core.Git.HostIO.RunAsync(() => Core.Git.HostDirectory.Exists(repo.Path));
+        if (await Task.WhenAny(check, Task.Delay(Busy.ShowAfter)) != check) _details.Content = Loading();
+        bool exists;
+        try { exists = await check; }
+        catch (IOException) { exists = false; }
+        if ((_tree.SelectedItem as ListViewItem)?.Tag is not Row { Repository: { } current } || current != repo) return;
+        if (!exists) { _details.Content = NotFound(repo); return; }
         var view = new StackPanel { Margin = new Thickness(24, 10, 20, 10) };
         AutomationProperties.SetAutomationId(view, "RepositoryDetailsUserControl");
         _details.Content = new ScrollViewer { Content = view, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
@@ -541,6 +581,18 @@ internal sealed class RepositoryManagerView : UserControl
     }
 
     /// <summary>フォルダが無いとき（"Repository Not Found" と Remove）。</summary>
+    /// <summary>詳細を読んでいる間（1 秒を過ぎたら出す）。</summary>
+    private static FrameworkElement Loading()
+    {
+        var panel = new StackPanel { Width = 200, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        panel.Children.Add(new ProgressBar { IsIndeterminate = true, Height = 4, Margin = new Thickness(0, 0, 0, 8) });
+        var text = new TextBlock { Text = "Loading...", HorizontalAlignment = HorizontalAlignment.Center };
+        text.SetResourceReference(TextBlock.ForegroundProperty, "Gk.Text.Dim");
+        panel.Children.Add(text);
+        AutomationProperties.SetAutomationId(panel, "RepositoryDetailsLoading");
+        return panel;
+    }
+
     private FrameworkElement NotFound(RepositoryListEntry repo)
     {
         var p = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };

@@ -48,6 +48,13 @@ public partial class App : Application
         // 未処理の例外はログに残す（A20 のクラッシュレポートの土台）
         DispatcherUnhandledException += (_, ex) =>
         {
+            // 待っている処理を Cancel で止めた（Busy）：知らせることは無い
+            if (ex.Exception is OperationCanceledException)
+            {
+                Log.Info("Canceled: " + ex.Exception.Message);
+                ex.Handled = true;
+                return;
+            }
             Log.Error("Unhandled exception: " + ex.Exception);
             MessageBox.Show(ex.Exception.Message, ProductInfo.Name, MessageBoxButton.OK, MessageBoxImage.Error);
             ex.Handled = true;
@@ -143,6 +150,8 @@ public partial class App : Application
         if (!_isPrimary) { base.OnExit(e); return; }
         try { SettingsStore.Save(Settings); Log.Debug("Saving settings"); }
         catch (Exception ex) { Log.Error($"Saving settings failed: {ex.Message}"); }
+        // 閉じたタブの下書きなど、裏で書いている設定を書き終えてから接続を閉じる（窓はもう閉じているので待ってよい）
+        ViewModels.RepositoryViewModel.FlushConfigWrites(TimeSpan.FromSeconds(5));
         RemoteRepositoryWatcher.StopAll();   // WSL・SSH の見張り
         SshGitHost.CloseSessions();   // 常駐の ssh（T1307）
         SshAuth.Stop();

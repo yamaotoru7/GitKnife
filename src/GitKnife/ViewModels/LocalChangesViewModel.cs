@@ -106,7 +106,8 @@ public sealed partial class LocalChangesViewModel : ObservableObject
         var selS = _selectedStaged.Select(s => s.Path).ToHashSet();
 
         // Hide Untracked Files / Show Ignored Files（ファイル一覧の設定ドロップダウン）
-        var unstaged = status.Unstaged.Where(e => !(_repo.HideUntracked && e.WorkTree == FileChange.Untracked))
+        var hideUntracked = _repo.HideUntracked;
+        var unstaged = status.Unstaged.Where(e => !(hideUntracked && e.WorkTree == FileChange.Untracked))
             .Concat(_repo.ShowIgnored ? status.Entries.Where(e => e.WorkTree == FileChange.Ignored) : []);
         var newUnstaged = FileListItem.Build(unstaged.Where(MatchesFilter), Mode, staged: false);
         // Amend 中は Staged に最後のコミットの変更も出す
@@ -117,7 +118,7 @@ public sealed partial class LocalChangesViewModel : ObservableObject
         if (!force && SameRows(_unstagedRoots, newUnstaged) && SameRows(_stagedRoots, newStaged))
         {
             // 一覧は変わらない：行と選択はそのまま、diff だけ読み直して変わったときだけ差し替える
-            PrefillMergeMessage();
+            _ = PrefillMergeMessageAsync();
             _ = LoadDiffAsync(keepIfSame: true);
             return;
         }
@@ -144,7 +145,7 @@ public sealed partial class LocalChangesViewModel : ObservableObject
         }
         SelectionRestored?.Invoke(this, EventArgs.Empty);
         UpdateSelectionState();
-        PrefillMergeMessage();
+        _ = PrefillMergeMessageAsync();
         OnPropertyChanged(nameof(CommitButtonText));
         OnPropertyChanged(nameof(CanCommit));
         _ = LoadDiffAsync();
@@ -317,7 +318,7 @@ public sealed partial class LocalChangesViewModel : ObservableObject
             FileName = $"{_repo.Name}-{DateTime.Now:HH-mm-ss}",
             DefaultExt = ".patch",
             Filter = "Patches (*.patch)|*.patch",
-            InitialDirectory = _repo.Settings.RecentPatchDirectory is { } d && Core.Git.HostDirectory.Exists(d) ? d : null,
+            InitialDirectory = Views.FileDialogs.ExistingLocalDirectory(_repo.Settings.RecentPatchDirectory),
         };
         if (dlg.ShowDialog(System.Windows.Application.Current.MainWindow) != true) return;
         _repo.Settings.RecentPatchDirectory = System.IO.Path.GetDirectoryName(dlg.FileName);
@@ -347,9 +348,12 @@ public sealed partial class LocalChangesViewModel : ObservableObject
         var path = System.IO.Path.Combine(RepositoryPath, ".gitignore");
         try
         {
-            var text = Core.Git.HostFile.Exists(path) ? await Core.Git.HostFile.ReadAllTextAsync(path) : "";
-            var prefix = text.Length > 0 && !text.EndsWith('\n') ? "\n" : "";
-            await Core.Git.HostFile.AppendAllTextAsync(path, prefix + pattern + "\n");
+            await Busy.IoAsync(null, "Updating .gitignore...", () =>
+            {
+                var text = Core.Git.HostFile.Exists(path) ? Core.Git.HostFile.ReadAllText(path) : "";
+                var prefix = text.Length > 0 && !text.EndsWith('\n') ? "\n" : "";
+                Core.Git.HostFile.AppendAllText(path, prefix + pattern + "\n");
+            });
         }
         catch (System.IO.IOException ex) { Alerts.ShowGitError("Ignore", ex.Message); }
         await _repo.RefreshStatusAsync();
@@ -452,7 +456,7 @@ public sealed partial class LocalChangesViewModel : ObservableObject
     /// merge / cherry-pick / revert の途中なら、件名と説明に .git/MERGE_MSG を入れる（"# Conflicts:" の行も残す。
     /// コミット時に git が # の行を消す）。同じ操作の間は 1 回だけ。
     /// </summary>
-    private void PrefillMergeMessage()
+    private async Task PrefillMergeMessageAsync()
     {
         var op = _repo.References?.Operation ?? Core.Git.Model.RepositoryOperation.None;
         if (op is not (Core.Git.Model.RepositoryOperation.Merge or Core.Git.Model.RepositoryOperation.CherryPick or Core.Git.Model.RepositoryOperation.Revert))
@@ -460,15 +464,34 @@ public sealed partial class LocalChangesViewModel : ObservableObject
             _prefilledFor = null;
             return;
         }
-        if (Tree is not { } tree || Subject.Length > 0) return;
+        if (Tree is not { } tree || Subject.Length > 0 || _prefilling) return;
         var path = System.IO.Path.Combine(tree.GitDirectory, "MERGE_MSG");
-        var key = op + (Core.Git.HostFile.Exists(path) ? Core.Git.HostFile.GetLastWriteTimeUtc(path).Ticks.ToString() : "");
-        if (_prefilledFor == key || !Core.Git.HostFile.Exists(path)) return;
-        _prefilledFor = key;
-        var parts = Core.Git.HostFile.ReadAllText(path).Replace("\r\n", "\n").TrimEnd('\n').Split('\n', 2);
+        // MERGE_MSG の時刻と中身は UI のスレッドの外で読む（SSH の先では往復がある）
+        _prefilling = true;
+        (string key, string? text) read;
+        try
+        {
+            read = await Core.Git.HostIO.RunAsync(() =>
+            {
+                if (!Core.Git.HostFile.Exists(path)) return (op.ToString(), (string?)null);
+                var key = op + Core.Git.HostFile.GetLastWriteTimeUtc(path).Ticks.ToString();
+                return (key, _prefilledFor == key ? null : Core.Git.HostFile.ReadAllText(path));
+            });
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException)
+        {
+            Log.Warning($"Reading MERGE_MSG failed: {ex.Message}");
+            return;
+        }
+        finally { _prefilling = false; }
+        // 読んでいる間に書き始めていたら入れない
+        if (read.text is null || _prefilledFor == read.key || Subject.Length > 0) return;
+        _prefilledFor = read.key;
+        var parts = read.text.Replace("\r\n", "\n").TrimEnd('\n').Split('\n', 2);
         Subject = parts[0];
         Description = parts.Length > 1 ? parts[1].Trim('\n') : "";
     }
+    private bool _prefilling;
 
     /// <summary>
     /// コミットのテンプレート（commit.template）：件名の欄にフォーカスが入ったとき、件名も説明も空なら `git config commit.template` のファイルを入れる
@@ -545,7 +568,7 @@ public sealed partial class LocalChangesViewModel : ObservableObject
         var amend = Amend;
         return RunAsync(push ? "Commit and Push" : "Commit", async t =>
         {
-            var signOff = _repo.CommonGitDirectory is { } common && Core.Settings.RepositoryConfig.Load(common).SignOff;
+            var signOff = _repo.CommonGitDirectory is { } common && await Core.Git.HostIO.RunAsync(() => Core.Settings.RepositoryConfig.Load(common).SignOff);
             await t.CommitAsync(message, amend, signOff);
             Subject = "";
             Description = "";

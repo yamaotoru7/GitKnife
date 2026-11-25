@@ -20,7 +20,7 @@ public sealed partial class PreferencesViewModel : DialogViewModel
     private bool _loadingInstances;
 
     /// <summary>Custom Commands タブ（グローバルの custom-commands.json。閉じたら保存）。</summary>
-    public CustomCommandsEditorViewModel CustomCommands { get; } = new(null, null);
+    public CustomCommandsEditorViewModel CustomCommands { get; } = new();
 
     public PreferencesViewModel(AppSettings settings, GitProcess git)
     {

@@ -23,6 +23,7 @@ internal static class SshAuth
     public static void Start(Dispatcher dispatcher)
     {
         s_dispatcher = dispatcher;
+        SshAskPass.IsUiThread = dispatcher.CheckAccess;
         var helper = System.IO.Path.Combine(AppContext.BaseDirectory, "GitKnife.AskPass.exe");
         if (!System.IO.File.Exists(helper))
         {

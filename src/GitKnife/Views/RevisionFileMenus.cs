@@ -39,7 +39,7 @@ internal static class RevisionFileMenus
             if (diff.Items.Count == 0) diff.Items.Add(new MenuItem());
             m.Items.Add(diff);
         }
-        Add(m, "Show in File Explorer", () => RepositoryActions.Explorer(Core.Git.HostFile.Exists(full) || Core.Git.HostDirectory.Exists(full) ? $"/select,\"{full}\"" : $"\"{repo.Path}\""));
+        Add(m, "Show in File Explorer", () => RepositoryActions.RevealInExplorer(full, repo.Path));
         m.Items.Add(new Separator());
         if (!fileTree)
         {

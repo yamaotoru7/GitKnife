@@ -167,7 +167,7 @@ internal sealed class HistoryWindow : ToolWindow
         Add("Open in Separate Window...", () => RevisionWindow.OpenCommit(_repo, h.Sha, h.Author, h.Email, h.Date, h.Subject));
         Add("Reveal in GitKnife", () => RevealCommit(h.Sha));
         Add("Open", () => _ = RevisionFileMenus.OpenRevisionFile(_repo, h.Sha, h.Path)).IsEnabled = h.Change != FileChange.Deleted;
-        Add("Show in File Explorer", () => RepositoryActions.Explorer(Core.Git.HostFile.Exists(full) ? $"/select,\"{full}\"" : $"\"{_repo.Path}\""));
+        Add("Show in File Explorer", () => RepositoryActions.RevealInExplorer(full, _repo.Path));
         m.Items.Add(new Separator());
         Add("Reset File to State at Commit...", () => RevisionFileMenus.ResetFile(_repo, h.Sha, h.Path, "at"));
         m.Items.Add(new Separator());

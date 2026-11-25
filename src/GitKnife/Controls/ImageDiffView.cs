@@ -77,24 +77,41 @@ internal sealed class ImageDiffView : UserControl
     public async Task LoadAsync(RepositoryViewModel repo, FileDiff diff)
     {
         var version = ++_loadVersion;
+        var image = IsImage(diff);
+        if (!image)
+        {
+            // 画像でないファイルはカードに大きさを出すだけなので、中身は取らない（SSH の先の大きなファイルを丸ごと読んで UI が止まった）
+            var oldSize = diff.IsNew ? null : await ReadBlobSizeAsync(repo, diff.OldIndex);
+            var newSize = diff.IsDeleted ? null : await ReadBlobSizeAsync(repo, diff.NewIndex) ?? await Task.Run(() => ReadWorkingFileSize(repo, diff.NewPath));
+            if (version != _loadVersion) return;
+            var bothSides = oldSize is not null && newSize is not null;
+            var extension = System.IO.Path.GetExtension(diff.Path);
+            _src.ShowFile(oldSize, bothSides ? "old" : "deleted", "Gk.Change.Deleted", extension);
+            _dst.ShowFile(newSize, bothSides ? "new" : "created", "Gk.Change.Added", extension);
+            ShowSides(oldSize is not null, newSize is not null, modes: false);
+            return;
+        }
         var oldBytes = diff.IsNew ? null : await ReadBlobAsync(repo, diff.OldIndex);
-        var newBytes = diff.IsDeleted ? null : await ReadBlobAsync(repo, diff.NewIndex) ?? ReadWorkingFile(repo, diff.NewPath);
+        var newBytes = diff.IsDeleted ? null : await ReadBlobAsync(repo, diff.NewIndex) ?? await Task.Run(() => ReadWorkingFile(repo, diff.NewPath));
         if (version != _loadVersion) return;
         var both = oldBytes is not null && newBytes is not null;
-        var image = IsImage(diff);
-        var extension = System.IO.Path.GetExtension(diff.Path);
-        _src.Show(oldBytes, both ? "old" : "deleted", "Gk.Change.Deleted", image ? null : extension);
-        _dst.Show(newBytes, both ? "new" : "created", "Gk.Change.Added", image ? null : extension);
-        // 片側だけのときは、その側を真ん中に。切り替えは両側があるときだけ
-        _sideBySide.ColumnDefinitions[0].Width = oldBytes is null ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
-        _sideBySide.ColumnDefinitions[1].Width = newBytes is null ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
-        _modes.Visibility = both && image ? Visibility.Visible : Visibility.Collapsed;
-        _sideBySideRadio.IsChecked = true;
-        if (both && image)
+        _src.Show(oldBytes, both ? "old" : "deleted", "Gk.Change.Deleted");
+        _dst.Show(newBytes, both ? "new" : "created", "Gk.Change.Added");
+        ShowSides(oldBytes is not null, newBytes is not null, modes: both);
+        if (both)
         {
             _swipe.Show(Decode(oldBytes!), Decode(newBytes!));
             _onion.Show(Decode(oldBytes!), Decode(newBytes!));
         }
+    }
+
+    /// <summary>片側だけのときは、その側を真ん中に。切り替え（Side-by-Side / Swipe / Onion Skin）は両側の画像があるときだけ。</summary>
+    private void ShowSides(bool hasOld, bool hasNew, bool modes)
+    {
+        _sideBySide.ColumnDefinitions[0].Width = hasOld ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+        _sideBySide.ColumnDefinitions[1].Width = hasNew ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+        _modes.Visibility = modes ? Visibility.Visible : Visibility.Collapsed;
+        _sideBySideRadio.IsChecked = true;
     }
 
     private static BitmapSource? Decode(byte[] bytes)
@@ -228,11 +245,27 @@ internal sealed class ImageDiffView : UserControl
         return r.Succeeded ? r.BinaryStandardOutput : null;
     }
 
+    /// <summary>blob の大きさ（`cat-file -s`）。</summary>
+    private static async Task<long?> ReadBlobSizeAsync(RepositoryViewModel repo, string? sha)
+    {
+        if (string.IsNullOrEmpty(sha) || sha.All(c => c == '0')) return null;
+        var r = await repo.Git.RunAsync(new GitRequest(repo.Path, ["cat-file", "-s", sha]));
+        return r.Succeeded && long.TryParse(r.StandardOutput.Trim(), out var size) ? size : null;
+    }
+
     private static byte[]? ReadWorkingFile(RepositoryViewModel repo, string? path)
     {
         if (string.IsNullOrEmpty(path)) return null;
         var full = System.IO.Path.Combine(repo.Path, path.Replace('/', System.IO.Path.DirectorySeparatorChar));
         try { return Core.Git.HostFile.Exists(full) ? Core.Git.HostFile.ReadAllBytes(full) : null; }
+        catch (IOException) { return null; }
+    }
+
+    private static long? ReadWorkingFileSize(RepositoryViewModel repo, string? path)
+    {
+        if (string.IsNullOrEmpty(path)) return null;
+        var full = System.IO.Path.Combine(repo.Path, path.Replace('/', System.IO.Path.DirectorySeparatorChar));
+        try { return Core.Git.HostFile.GetLength(full); }
         catch (IOException) { return null; }
     }
 
@@ -272,22 +305,29 @@ internal sealed class ImageDiffView : UserControl
             Content = new ScrollViewer { Content = panel, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         }
 
-        /// <param name="extension">画像でないときの拡張子（null なら画像として出す）。</param>
-        public void Show(byte[]? bytes, string title, string colorKey, string? extension = null)
+        /// <summary>画像でないファイルのカード（拡張子と大きさ）。size が null ならこの側を隠す。</summary>
+        public void ShowFile(long? size, string title, string colorKey, string extension)
+        {
+            Visibility = size is null ? Visibility.Collapsed : Visibility.Visible;
+            if (size is not { } length) return;
+            _title.Text = title;
+            _title.SetResourceReference(TextBlock.ForegroundProperty, colorKey);
+            _frame.Visibility = Visibility.Collapsed;
+            _card.Visibility = Visibility.Visible;
+            _image.Source = null;
+            _extension.Text = extension;
+            _description.Text = $"{FormatSize(length)} ({length:N0} B)";
+        }
+
+        /// <summary>画像。</summary>
+        public void Show(byte[]? bytes, string title, string colorKey)
         {
             Visibility = bytes is null ? Visibility.Collapsed : Visibility.Visible;
             if (bytes is null) return;
             _title.Text = title;
             _title.SetResourceReference(TextBlock.ForegroundProperty, colorKey);
-            _frame.Visibility = extension is null ? Visibility.Visible : Visibility.Collapsed;
-            _card.Visibility = extension is null ? Visibility.Collapsed : Visibility.Visible;
-            if (extension is not null)
-            {
-                _image.Source = null;
-                _extension.Text = extension;
-                _description.Text = $"{FormatSize(bytes.Length)} ({bytes.Length:N0} B)";
-                return;
-            }
+            _frame.Visibility = Visibility.Visible;
+            _card.Visibility = Visibility.Collapsed;
             try
             {
                 var bmp = new BitmapImage();

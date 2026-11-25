@@ -25,10 +25,16 @@ internal static class LocalChangesMenus
         // Open はフォルダを含まなければ使える（消したファイルや複数選択でも）。開けるのは作業ツリーにあるものだけ
         Add(m, "Open", () =>
         {
+            // SSH の先のファイルは Windows のアプリでは開けない（あるかどうかを確かめに接続先へ行かない）
+            if (Core.Git.SshPath.IsSshPath(vm.RepositoryPath))
+            {
+                Alerts.ShowInfo("Open", "Files of a repository on an SSH host can't be opened with Windows apps. Use Open In Console instead.");
+                return;
+            }
             foreach (var s in selected)
             {
                 var path = System.IO.Path.Combine(vm.RepositoryPath, s.Path.Replace('/', System.IO.Path.DirectorySeparatorChar));
-                if (Core.Git.HostFile.Exists(path)) Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+                if (System.IO.File.Exists(path)) Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
             }
         }).IsEnabled = !hasFolder;
         if (conflicted is not null)
@@ -61,7 +67,7 @@ internal static class LocalChangesMenus
         Add(m, "Show in File Explorer", () =>
         {
             var path = System.IO.Path.Combine(vm.RepositoryPath, selected[0].Path.Replace('/', System.IO.Path.DirectorySeparatorChar));
-            RepositoryActions.Explorer(Core.Git.HostFile.Exists(path) || Core.Git.HostDirectory.Exists(path) ? $"/select,\"{path}\"" : $"\"{vm.RepositoryPath}\"");
+            RepositoryActions.RevealInExplorer(path, vm.RepositoryPath);
         });
         Sep(m);
         // 別窓で開く（メインとは別のトップレベル窓）。フォルダの履歴は未実装
@@ -154,7 +160,7 @@ internal static class LocalChangesMenus
         {
             right = System.IO.Path.Combine(vm.RepositoryPath, path.Replace('/', System.IO.Path.DirectorySeparatorChar));
             // 消したファイルは作業ツリーに無いので空のファイルと比べる
-            if (!Core.Git.HostFile.Exists(right))
+            if (!await Core.Git.HostIO.RunAsync(() => Core.Git.HostFile.Exists(right)))
             {
                 right = System.IO.Path.Combine(dir, "DELETED_" + name);
                 await Core.Git.HostFile.WriteAllTextAsync(right, "");

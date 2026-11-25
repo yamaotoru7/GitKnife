@@ -542,10 +542,44 @@ public sealed partial class CreateWorktreeDialogViewModel : DialogViewModel
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(CanSubmit), nameof(CanSubmitNow))] private string _path = "";
 
     public override bool CanSubmit => (IsNewBranch ? StartFrom is not null && RefName.Problem(BranchName.Trim(), _repo) is null : true)
-                                      && Path.Trim().Length > 0 && !Core.Git.HostDirectory.Exists(Path.Trim());
+                                      && Path.Trim().Length > 0 && _pathIsFree;
 
     partial void OnBranchNameChanged(string value) => UpdatePath();
-    partial void OnPathChanged(string value) { if (!_settingPath) _pathEdited = true; }
+    partial void OnPathChanged(string value)
+    {
+        if (!_settingPath) _pathEdited = true;
+        _ = CheckPathAsync();
+    }
+
+    /// <summary>その場所にまだフォルダが無いか（入力が変わるたびに UI のスレッドの外で確かめる。確かめるまでは押せない）。</summary>
+    private bool _pathIsFree;
+    private CancellationTokenSource? _pathCheck;
+
+    private async Task CheckPathAsync()
+    {
+        _pathCheck?.Cancel();
+        var cts = _pathCheck = new CancellationTokenSource();
+        SetPathIsFree(false);
+        var path = Path.Trim();
+        if (path.Length == 0) return;
+        try
+        {
+            // 打っている間は確かめない
+            await Task.Delay(150, cts.Token);
+            var exists = await Core.Git.HostIO.RunAsync(() => Core.Git.HostDirectory.Exists(path), cts.Token);
+            if (!cts.IsCancellationRequested) SetPathIsFree(!exists);
+        }
+        catch (OperationCanceledException) { }
+        catch (IOException ex) { Core.Logging.Log.Warning($"Checking the worktree folder failed: {ex.Message}"); }
+    }
+
+    private void SetPathIsFree(bool value)
+    {
+        if (_pathIsFree == value) return;
+        _pathIsFree = value;
+        OnPropertyChanged(nameof(CanSubmit));
+        OnPropertyChanged(nameof(CanSubmitNow));
+    }
 
     private void UpdatePath()
     {

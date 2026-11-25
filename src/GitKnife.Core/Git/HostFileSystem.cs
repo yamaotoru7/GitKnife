@@ -28,9 +28,9 @@ public static class HostFile
     public static IEnumerable<string> ReadLines(string path) => Ssh(path) is null ? File.ReadLines(path) : ReadAllLines(path);
 
     public static Task<string> ReadAllTextAsync(string path, CancellationToken ct = default) =>
-        Ssh(path) is null ? File.ReadAllTextAsync(path, ct) : Task.Run(() => ReadAllText(path), ct);
+        Ssh(path) is null ? File.ReadAllTextAsync(path, ct) : HostIO.RunAsync(() => ReadAllText(path), ct);
     public static Task<byte[]> ReadAllBytesAsync(string path, CancellationToken ct = default) =>
-        Ssh(path) is null ? File.ReadAllBytesAsync(path, ct) : Task.Run(() => ReadAllBytes(path), ct);
+        Ssh(path) is null ? File.ReadAllBytesAsync(path, ct) : HostIO.RunAsync(() => ReadAllBytes(path), ct);
 
     public static void WriteAllBytes(string path, byte[] bytes)
     {
@@ -47,9 +47,9 @@ public static class HostFile
 
     public static Task WriteAllTextAsync(string path, string? text, CancellationToken ct = default) => WriteAllTextAsync(path, text, new UTF8Encoding(false), ct);
     public static Task WriteAllTextAsync(string path, string? text, Encoding encoding, CancellationToken ct = default) =>
-        Ssh(path) is null ? File.WriteAllTextAsync(path, text, encoding, ct) : Task.Run(() => WriteAllText(path, text, encoding), ct);
+        Ssh(path) is null ? File.WriteAllTextAsync(path, text, encoding, ct) : HostIO.RunAsync(() => WriteAllText(path, text, encoding), ct);
     public static Task WriteAllBytesAsync(string path, byte[] bytes, CancellationToken ct = default) =>
-        Ssh(path) is null ? File.WriteAllBytesAsync(path, bytes, ct) : Task.Run(() => WriteAllBytes(path, bytes), ct);
+        Ssh(path) is null ? File.WriteAllBytesAsync(path, bytes, ct) : HostIO.RunAsync(() => WriteAllBytes(path, bytes), ct);
 
     public static void AppendAllText(string path, string? text)
     {
@@ -57,7 +57,7 @@ public static class HostFile
         h.Shell($"cat >> {h.Q(path)}", Encoding.UTF8.GetBytes(text ?? "")).ThrowIfFailed(path);
     }
     public static Task AppendAllTextAsync(string path, string? text, CancellationToken ct = default) =>
-        Ssh(path) is null ? File.AppendAllTextAsync(path, text, ct) : Task.Run(() => AppendAllText(path, text), ct);
+        Ssh(path) is null ? File.AppendAllTextAsync(path, text, ct) : HostIO.RunAsync(() => AppendAllText(path, text), ct);
 
     public static void Delete(string path)
     {
@@ -81,6 +81,18 @@ public static class HostFile
         WriteAllBytes(destination, ReadAllBytes(source));   // ローカルと接続先の間は読んで書く
     }
 
+    /// <summary>ファイルの大きさ（バイト）。無ければ null。中身を取らずに大きさだけ知りたいとき用。</summary>
+    public static long? GetLength(string path)
+    {
+        if (Ssh(path) is not { } h)
+        {
+            var info = new FileInfo(path);
+            return info.Exists ? info.Length : null;
+        }
+        var r = h.Shell($"stat -c %s {h.Q(path)}");
+        return r.ExitCode == 0 && long.TryParse(r.Text.Trim(), out var size) ? size : null;
+    }
+
     public static DateTime GetLastWriteTimeUtc(string path)
     {
         if (Ssh(path) is not { } h) return File.GetLastWriteTimeUtc(path);
@@ -102,6 +114,32 @@ public static class HostDirectory
     private static SshGitHost? Ssh(string path) => SshPath.IsSshPath(path) ? GitHost.FromPath(path) as SshGitHost : null;
 
     public static bool Exists(string path) => Ssh(path) is { } h ? h.Shell($"test -d {h.Q(path)}").ExitCode == 0 : Directory.Exists(path);
+
+    /// <summary>
+    /// いくつものフォルダがあるか（SSH は接続先ごとに 1 回の往復でまとめて確かめる）。接続できない接続先のフォルダは無いことにする。
+    /// </summary>
+    public static IReadOnlyDictionary<string, bool> ExistsMany(IEnumerable<string> paths)
+    {
+        var result = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+        foreach (var group in paths.Distinct(StringComparer.OrdinalIgnoreCase).GroupBy(Ssh))
+        {
+            var items = group.ToList();
+            if (group.Key is not { } h)
+            {
+                foreach (var p in items) result[p] = Directory.Exists(p);
+                continue;
+            }
+            var lines = Array.Empty<string>();
+            try
+            {
+                var r = h.Shell(string.Join("; ", items.Select(p => $"if test -d {h.Q(p)}; then echo 1; else echo 0; fi")));
+                lines = r.Text.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            }
+            catch (IOException ex) { Logging.Log.Warning($"Checking folders on {h.Destination} failed: {ex.Message}"); }
+            for (var i = 0; i < items.Count; i++) result[items[i]] = i < lines.Length && lines[i].Trim() == "1";
+        }
+        return result;
+    }
 
     public static void CreateDirectory(string path)
     {
@@ -141,6 +179,30 @@ public static class HostDirectory
     }
 }
 
+/// <summary>
+/// リポジトリの中のファイルの読み書き（<see cref="HostFile"/>、<see cref="HostDirectory"/>、それを使う設定の読み書き）を UI のスレッドの外で行う。
+/// SSH の接続先では 1 回ごとに往復があり、回線が遅い・切れたときは数十秒かかることもあるので、画面から呼ぶときは必ずこれを通す。
+/// 渡した止め方は、中で動く接続先のシェルにも渡る（止めると ssh を終わらせる）。
+/// </summary>
+public static class HostIO
+{
+    private static readonly AsyncLocal<CancellationToken> s_token = new();
+
+    /// <summary>今の処理の止め方（<see cref="RunAsync{T}(Func{T}, CancellationToken)"/> の中でだけ入っている）。</summary>
+    public static CancellationToken CancellationToken => s_token.Value;
+
+    public static Task<T> RunAsync<T>(Func<T> work, CancellationToken ct = default) =>
+        Task.Run(() =>
+        {
+            ct.ThrowIfCancellationRequested();
+            s_token.Value = ct;
+            return work();
+        }, ct);
+
+    public static Task RunAsync(Action work, CancellationToken ct = default) =>
+        RunAsync(() => { work(); return true; }, ct);
+}
+
 /// <summary>接続先のシェルで 1 つのコマンドを動かした結果。</summary>
 public sealed record ShellResult(int ExitCode, byte[] Output, string ErrorText)
 {
@@ -160,7 +222,9 @@ public sealed partial record SshGitHost
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, RemoteShellPool> s_pools = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>この接続先の常駐のシェル（`ssh -T … sh`。接続先ごとに最大 4 本。T1307）。</summary>
-    public RemoteShellPool Pool => s_pools.GetOrAdd(Destination, _ => new RemoteShellPool(() => SshAskPass.StartInfo(Destination, ["-o", "ServerAliveInterval=30"], ["sh"])));
+    /// 回線が切れたら 30 秒ほどで気づく（15 秒ごとに確かめ、2 回返事が無ければ切る）。
+    public RemoteShellPool Pool => s_pools.GetOrAdd(Destination, _ => new RemoteShellPool(() =>
+        SshAskPass.StartInfo(Destination, ["-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=2"], ["sh"])));
 
     /// <summary>常駐のシェルを全部閉じる（アプリの終了時）。</summary>
     public static void CloseSessions()
@@ -170,19 +234,36 @@ public sealed partial record SshGitHost
     }
 
     /// <summary>接続先のシェルでコマンドを動かす（同期。ファイルの読み書き用）。stdin に input を流す。常駐のシェルが使えなければ 1 回ずつ ssh を張る。</summary>
+    /// <remarks>
+    /// 止め方は <see cref="HostIO.CancellationToken"/>（<see cref="HostIO.RunAsync{T}(Func{T}, CancellationToken)"/> の中で呼ぶと渡る）。
+    /// 接続先が遠いと 1 回でも長くかかるので、UI のスレッドからは呼ばない（呼ぶと警告をログに書く）。
+    /// </remarks>
     public ShellResult Shell(string command, byte[]? input = null)
     {
         Logging.Log.Debug($"ssh {Destination} {command}");
+        if (SshAskPass.IsUiThread?.Invoke() == true)
+            Logging.Log.Warning($"remote shell on the UI thread: {command}{Environment.NewLine}{Environment.StackTrace}");
+        var ct = HostIO.CancellationToken;
         // 待つ間に AskPass の質問を出せるようにする（UI のスレッドから呼ばれることがある）
-        try { return SshAskPass.Wait(Task.Run(() => Pool.RunAsync(command, input))); }
-        catch (IOException ex) { Logging.Log.Warning($"remote shell failed, falling back to one ssh: {ex.Message}"); }
+        try { return SshAskPass.Wait(Task.Run(() => Pool.RunAsync(command, input, ct), ct)); }
+        catch (IOException ex) when (!ct.IsCancellationRequested && !IsConnectFailure(ex))
+        {
+            Logging.Log.Warning($"remote shell failed, falling back to one ssh: {ex.Message}");
+        }
         return ShellOnce(command, input);
     }
 
-    /// <summary>ssh を 1 回張ってコマンドを動かす。</summary>
-    public ShellResult ShellOnce(string command, byte[]? input = null) => SshAskPass.Wait(Task.Run(() => RunOnce(command, input)));
+    /// <summary>接続できなかった（張り直しても同じなので、もう一度 ssh を張らない）。</summary>
+    private static bool IsConnectFailure(IOException ex) => ex is RemoteShellConnectException;
 
-    private ShellResult RunOnce(string command, byte[]? input)
+    /// <summary>ssh を 1 回張ってコマンドを動かす。</summary>
+    public ShellResult ShellOnce(string command, byte[]? input = null)
+    {
+        var ct = HostIO.CancellationToken;
+        return SshAskPass.Wait(Task.Run(() => RunOnce(command, input, ct), ct));
+    }
+
+    private ShellResult RunOnce(string command, byte[]? input, CancellationToken ct)
     {
         var psi = SshAskPass.StartInfo(Destination, [], [command]);
         psi.UseShellExecute = false;
@@ -192,6 +273,7 @@ public sealed partial record SshGitHost
         psi.RedirectStandardError = true;
         psi.StandardErrorEncoding = new UTF8Encoding(false);
         using var p = Process.Start(psi)!;
+        using var reg = ct.Register(() => { try { p.Kill(entireProcessTree: true); } catch { } });
         var stdin = Task.Run(() =>
         {
             try { if (input is not null) p.StandardInput.BaseStream.Write(input); }
@@ -202,6 +284,7 @@ public sealed partial record SshGitHost
         p.StandardOutput.BaseStream.CopyTo(ms);
         p.WaitForExit();
         stdin.Wait();
+        ct.ThrowIfCancellationRequested();
         return new ShellResult(p.ExitCode, ms.ToArray(), err.Result);
     }
 }

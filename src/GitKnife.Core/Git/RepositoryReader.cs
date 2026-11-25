@@ -48,7 +48,7 @@ public sealed class RepositoryReader
     /// <summary>path（リポジトリ内の任意の場所）からリポジトリを開く。リポジトリでなければ null。</summary>
     public static async Task<RepositoryReader?> OpenAsync(GitProcess git, string path, CancellationToken ct = default)
     {
-        if (!HostDirectory.Exists(path)) return null;
+        if (!await HostIO.RunAsync(() => HostDirectory.Exists(path), ct).ConfigureAwait(false)) return null;
         var r = await git.RunAsync(new GitRequest(path, ["rev-parse", "--show-toplevel", "--absolute-git-dir", "--git-common-dir"]), ct).ConfigureAwait(false);
         if (!r.Succeeded) return null;
         var lines = r.StandardOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -192,6 +192,10 @@ public sealed class RepositoryReader
     /// 進行中の操作の詳細（NotificationBar の文言用）。
     /// merge は MERGE_MSG の 1 行目から相手のブランチ名、rebase は rebase-merge／rebase-apply の head-name・onto・進み具合を読む。
     /// </summary>
+    public Task<OperationState> ReadOperationStateAsync(RepositoryReferences refs, CancellationToken ct = default)
+        => HostIO.RunAsync(() => ReadOperationState(refs), ct);
+
+    /// <inheritdoc cref="ReadOperationStateAsync"/>
     public OperationState ReadOperationState(RepositoryReferences refs)
     {
         var op = refs.Operation;

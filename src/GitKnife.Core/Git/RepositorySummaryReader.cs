@@ -48,7 +48,7 @@ public sealed class RepositorySummaryReader(GitProcess git, string workingDirect
         var commits = Run(["log", "--all", "--date-order", $"-{MaxItems}", "--format=%s%x00%aN%x00%aE%x00%ct"], ct);
         await Task.WhenAll(status, count, first, last, remotes, branches, tags, commits).ConfigureAwait(false);
 
-        var readme = FindReadme();
+        var readme = await HostIO.RunAsync(FindReadme, ct).ConfigureAwait(false);
         return new RepositorySummary
         {
             UncommittedFiles = Lines(status.Result).Count,

@@ -12,18 +12,39 @@ namespace GitKnife.ViewModels.Dialogs;
 public sealed partial class CustomCommandsEditorViewModel : ObservableObject
 {
     private readonly string? _worktree;
-    private readonly string? _commonGitDirectory;
     private readonly string _globalPath;
 
-    /// <param name="worktree">Repository Settings なら作業ツリー、Preferences なら null。</param>
-    public CustomCommandsEditorViewModel(string? worktree, string? commonGitDirectory, string? globalPath = null)
+    /// <summary>リポジトリの Shared と Local のコマンドと置き場所（<see cref="LoadRepository"/> で UI のスレッドの外で読む）。</summary>
+    public sealed record RepositoryCommands(string SharedPath, string LocalPath, IReadOnlyList<CustomCommand> Commands);
+
+    /// <summary>リポジトリのコマンドを読む（SSH の先では往復があるので UI のスレッドの外で呼ぶ）。</summary>
+    public static RepositoryCommands LoadRepository(string worktree, string commonGitDirectory)
+    {
+        var shared = CustomCommandStore.SharedPath(worktree);
+        var local = CustomCommandStore.LocalPath(commonGitDirectory);
+        return new RepositoryCommands(shared, local,
+            [.. CustomCommandStore.LoadFile(shared, CustomCommandSource.Shared), .. CustomCommandStore.LoadFile(local, CustomCommandSource.Local)]);
+    }
+
+    /// <summary>Preferences（グローバルのコマンド。手元のファイル）。</summary>
+    public CustomCommandsEditorViewModel(string? globalPath = null)
+    {
+        _globalPath = globalPath ?? CustomCommandStore.GlobalPath;
+        Fill(CustomCommandStore.LoadFile(_globalPath, CustomCommandSource.Global));
+    }
+
+    /// <summary>Repository Settings（読んでおいたリポジトリのコマンド）。</summary>
+    public CustomCommandsEditorViewModel(string worktree, RepositoryCommands loaded)
     {
         _worktree = worktree;
-        _commonGitDirectory = commonGitDirectory;
-        _globalPath = globalPath ?? CustomCommandStore.GlobalPath;
-        IEnumerable<CustomCommand> loaded = IsRepository
-            ? [.. CustomCommandStore.LoadFile(SharedPath!, CustomCommandSource.Shared), .. CustomCommandStore.LoadFile(LocalPath!, CustomCommandSource.Local)]
-            : CustomCommandStore.LoadFile(_globalPath, CustomCommandSource.Global);
+        _globalPath = CustomCommandStore.GlobalPath;
+        SharedPath = loaded.SharedPath;
+        LocalPath = loaded.LocalPath;
+        Fill(loaded.Commands);
+    }
+
+    private void Fill(IEnumerable<CustomCommand> loaded)
+    {
         foreach (var c in loaded.OrderBy(c => c.Source).ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase))
             Items.Add(CustomCommandItemViewModel.From(c, this));
         Selected = Items.FirstOrDefault();
@@ -34,8 +55,8 @@ public sealed partial class CustomCommandsEditorViewModel : ObservableObject
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasSelection))] private CustomCommandItemViewModel? _selected;
     public bool HasSelection => Selected is not null;
 
-    internal string? SharedPath => _worktree is null ? null : CustomCommandStore.SharedPath(_worktree);
-    internal string? LocalPath => _commonGitDirectory is null ? null : CustomCommandStore.LocalPath(_commonGitDirectory);
+    internal string? SharedPath { get; }
+    internal string? LocalPath { get; }
 
     /// <summary>表示用の場所（`.git/gitknife/custom-commands.json` など。作業ツリーからの相対）。</summary>
     internal string LocationText(bool shared)
@@ -68,20 +89,29 @@ public sealed partial class CustomCommandsEditorViewModel : ObservableObject
         Selected = Items.Count == 0 ? null : Items[Math.Min(i, Items.Count - 1)];
     }
 
-    public void Save()
+    public void Save() => CreateSave()();
+
+    /// <summary>書き込み（今の一覧を取っておき、書くのは返した処理。SSH の先では UI のスレッドの外で動かす）。</summary>
+    public Action CreateSave()
     {
-        try
+        var commands = Items.Select(i => i.ToCommand()).ToList();
+        var global = IsRepository ? null : _globalPath;
+        var shared = SharedPath;
+        var local = LocalPath;
+        return () =>
         {
-            var commands = Items.Select(i => i.ToCommand()).ToList();
-            if (!IsRepository)
+            try
             {
-                CustomCommandStore.Save(_globalPath, commands, keepEmptyFile: true);
-                return;
+                if (global is not null)
+                {
+                    CustomCommandStore.Save(global, commands, keepEmptyFile: true);
+                    return;
+                }
+                if (shared is not null) CustomCommandStore.Save(shared, commands.Where(c => c.Source == CustomCommandSource.Shared), keepEmptyFile: false);
+                if (local is not null) CustomCommandStore.Save(local, commands.Where(c => c.Source == CustomCommandSource.Local), keepEmptyFile: false);
             }
-            if (SharedPath is { } shared) CustomCommandStore.Save(shared, commands.Where(c => c.Source == CustomCommandSource.Shared), keepEmptyFile: false);
-            if (LocalPath is { } local) CustomCommandStore.Save(local, commands.Where(c => c.Source == CustomCommandSource.Local), keepEmptyFile: false);
-        }
-        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException) { Log.Warning($"custom commands save failed: {ex.Message}"); }
+            catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException) { Log.Warning($"custom commands save failed: {ex.Message}"); }
+        };
     }
 }
 

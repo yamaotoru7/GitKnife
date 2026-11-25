@@ -299,7 +299,7 @@ public sealed partial class InteractiveRebaseViewModel : DialogViewModel, IRevis
         var ssh = _repo.Git.Host as Core.Git.SshGitHost;
         var dir = ssh is not null ? ssh.ToLocalPath("/tmp/gitknife-" + name) : Path.Combine(Path.GetTempPath(), "GitKnife", name);
         var messages = Path.Combine(dir, "messages");
-        Core.Git.HostDirectory.CreateDirectory(messages);
+        await Core.Git.HostIO.RunAsync(() => Core.Git.HostDirectory.CreateDirectory(messages), ct);
         var planFile = Path.Combine(dir, "plan.txt");
         if (ssh is not null) await Core.Git.InteractiveRebase.WriteRemoteScriptsAsync(dir, ct);
 

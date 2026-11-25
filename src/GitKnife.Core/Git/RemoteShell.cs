@@ -16,6 +16,7 @@ public sealed class RemoteShellSession : IDisposable
     private readonly Process _process;
     private readonly SemaphoreSlim _lock = new(1, 1);
     private long _next;
+    private bool _answered;
 
     public RemoteShellSession(ProcessStartInfo startInfo)
     {
@@ -63,7 +64,9 @@ public sealed class RemoteShellSession : IDisposable
             var begin = "@@GK-BEGIN " + id;
             string? line;
             while ((line = await _process.StandardOutput.ReadLineAsync(ct).ConfigureAwait(false)) is not null && line != begin) { }
-            if (line is null) throw new IOException("the remote shell has exited");
+            // 一度も返事が無いまま終わった：接続できなかった（届かない、認証に失敗した）
+            if (line is null) throw _answered ? new IOException("the remote shell has exited") : new RemoteShellConnectException("could not connect to the remote shell");
+            _answered = true;
             var output = new StringBuilder();
             while ((line = await _process.StandardOutput.ReadLineAsync(ct).ConfigureAwait(false)) is not null && line != "@@GK-ERR") output.Append(line);
             var error = new StringBuilder();
@@ -113,3 +116,6 @@ public sealed class RemoteShellPool(Func<ProcessStartInfo> startInfo, int size =
         while (_idle.TryTake(out var s)) s.Dispose();
     }
 }
+
+/// <summary>常駐のシェルが一度も返事をしないまま終わった（接続できなかった）。</summary>
+public sealed class RemoteShellConnectException(string message) : IOException(message);

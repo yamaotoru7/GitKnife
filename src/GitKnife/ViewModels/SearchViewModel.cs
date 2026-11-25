@@ -52,8 +52,11 @@ public sealed partial class SearchViewModel(RepositoryViewModel repo) : Observab
         _ => "Message",
     };
 
-    public IReadOnlyList<RevisionSearchQuery> Recent
-        => repo.CommonGitDirectory is { } dir ? Core.Settings.RepositoryConfig.Load(dir).RecentRevisionSearchQueries : [];
+    /// <summary>最近の検索（config.toml の recent_revision_search_queries。読み直しで読んだものを覚えておき、メニューはこれを出す）。</summary>
+    public IReadOnlyList<RevisionSearchQuery> Recent { get; private set; } = [];
+
+    /// <summary>読み直しで読んだ最近の検索を入れる。</summary>
+    public void SetRecent(IReadOnlyList<RevisionSearchQuery> recent) => Recent = recent;
 
     partial void OnSearchTextChanged(string value)
     {
@@ -104,13 +107,18 @@ public sealed partial class SearchViewModel(RepositoryViewModel repo) : Observab
         finally { if (_cts == cts) IsBusy = false; }
     }
 
+    /// <summary>最近の検索を変える（覚えている一覧はすぐ変え、config.toml には UI のスレッドの外で書く）。</summary>
     private void SaveRecent(Func<IReadOnlyList<RevisionSearchQuery>, IReadOnlyList<RevisionSearchQuery>> change)
     {
+        Recent = change(Recent).Take(MaxRecent).ToList();
         if (repo.CommonGitDirectory is not { } dir) return;
-        var c = Core.Settings.RepositoryConfig.Load(dir);
-        c.EnsureDefaults();
-        c.RecentRevisionSearchQueries = change(c.RecentRevisionSearchQueries).Take(MaxRecent).ToList();
-        try { c.Save(); } catch (IOException ex) { Log.Warning($"Saving repository config failed: {ex.Message}"); }
+        _ = repo.QueueConfigWrite(() =>
+        {
+            var c = Core.Settings.RepositoryConfig.Load(dir);
+            c.EnsureDefaults();
+            c.RecentRevisionSearchQueries = change(c.RecentRevisionSearchQueries).Take(MaxRecent).ToList();
+            c.Save();
+        });
     }
 
     /// <summary>コミットの行の開閉（ファイルの行を出す・隠す）。</summary>

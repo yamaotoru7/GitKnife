@@ -34,26 +34,38 @@ public sealed partial class RepositoryViewModel : ObservableObject, IRevisionDet
 
     /// <summary>
     /// リモートの "Fetch 'x' Automatically" が外れているか（git config の remote.&lt;name&gt;.disableimplicitfetch）。
-    /// メニューを作るときに読むので、git を呼ばず .git/config を読む。
+    /// メニューを作るときに使うので、読み直し（RefreshAsync）で .git/config を読んだ結果を覚えておく。
     /// </summary>
-    public bool IsImplicitFetchDisabled(string remote)
+    public bool IsImplicitFetchDisabled(string remote) => _implicitFetchDisabled.Contains(remote);
+    private IReadOnlySet<string> _implicitFetchDisabled = new HashSet<string>();
+
+    /// <summary>.git/config で disableimplicitfetch = true のリモート（UI のスレッドの外で呼ぶ）。</summary>
+    private static HashSet<string> ReadImplicitFetchDisabled(string config)
     {
+        var result = new HashSet<string>(StringComparer.Ordinal);
         try
         {
-            var config = System.IO.Path.Combine(CommonGitDirectory ?? System.IO.Path.Combine(Path, ".git"), "config");
-            var inSection = false;
+            string? remote = null;
             foreach (var raw in Core.Git.HostFile.ReadLines(config))
             {
                 var line = raw.Trim();
-                if (line.StartsWith('[')) { inSection = line.Equals($"[remote \"{remote}\"]", StringComparison.OrdinalIgnoreCase); continue; }
-                if (!inSection) continue;
+                if (line.StartsWith('['))
+                {
+                    var m = System.Text.RegularExpressions.Regex.Match(line, @"^\[remote ""(.*)""\]$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    remote = m.Success ? m.Groups[1].Value : null;
+                    continue;
+                }
+                if (remote is null) continue;
                 var eq = line.IndexOf('=');
                 if (eq > 0 && line[..eq].Trim().Equals("disableimplicitfetch", StringComparison.OrdinalIgnoreCase))
-                    return line[(eq + 1)..].Trim().Equals("true", StringComparison.OrdinalIgnoreCase);
+                {
+                    if (line[(eq + 1)..].Trim().Equals("true", StringComparison.OrdinalIgnoreCase)) result.Add(remote);
+                    else result.Remove(remote);
+                }
             }
         }
         catch (System.IO.IOException) { }
-        return false;
+        return result;
     }
 
     /// <summary>自動 fetch の 1 リモートの上限。これを過ぎたら git を子ごと止める（次の回の自動 fetch の間隔と同じ）。</summary>
@@ -245,18 +257,19 @@ public sealed partial class RepositoryViewModel : ObservableObject, IRevisionDet
 
     /// <summary>
     /// untracked を隠す（"Hide Untracked Files"）。worktree-config.toml の hide_untracked_files に保存する。
+    /// 読み直し（RefreshAsync）で読んだ値を覚えておく。SSH の先のリポジトリでは設定ファイルを読むたびに往復が要り、
+    /// 一覧を作るときにファイルごとに読むと UI が止まるため（untracked が 1000 件で 1 回の読み直しに約 10 秒かかった）。
     /// </summary>
     public bool HideUntracked
     {
-        get => LoadWorktreeConfig()?.HideUntrackedFiles ?? false;
+        get => _hideUntracked;
         set
         {
-            if (LoadWorktreeConfig() is not { } c) return;
-            c.EnsureDefaults();
-            c.HideUntrackedFiles = value;
-            try { c.Save(); } catch (System.IO.IOException ex) { Log.Warning($"Saving worktree config failed: {ex.Message}"); }
+            _hideUntracked = value;
+            _ = UpdateWorktreeConfigAsync(c => c.HideUntrackedFiles = value);
         }
     }
+    private bool _hideUntracked;
 
     /// <summary>.gitmodules の submodule（読み直すたびに更新）。</summary>
     public IReadOnlyList<Core.Git.SubmoduleInfo> Submodules { get; private set; } = [];
@@ -285,19 +298,17 @@ public sealed partial class RepositoryViewModel : ObservableObject, IRevisionDet
     /// <summary>View の最後の項目（Filter が付いていると "Clear Branch Filter"）。</summary>
     public string ActiveBranchFilterHeader => IsFiltered ? "Clear Branch Filter" : "Filter by Active Branch";
 
+    /// <summary>worktree-config.toml を変えて（UI のスレッドの外で）読み直す。change は裏のスレッドで動くので、画面の値は先に取っておく。</summary>
     private async Task SetWorktreeOptionAsync(Action<Core.Settings.WorktreeConfig> change)
     {
-        if (LoadWorktreeConfig() is not { } c) return;
-        c.EnsureDefaults();
-        change(c);
-        try { c.Save(); } catch (System.IO.IOException ex) { Log.Warning($"Saving worktree config failed: {ex.Message}"); }
+        await UpdateWorktreeConfigAsync(change);
         await RefreshAsync();
     }
 
-    public Task ToggleHideTagsAsync() => SetWorktreeOptionAsync(c => c.HideTags = !HideTags);
-    public Task ToggleHideStashesAsync() => SetWorktreeOptionAsync(c => c.HideStashes = !HideStashes);
+    public Task ToggleHideTagsAsync() { var v = !HideTags; return SetWorktreeOptionAsync(c => c.HideTags = v); }
+    public Task ToggleHideStashesAsync() { var v = !HideStashes; return SetWorktreeOptionAsync(c => c.HideStashes = v); }
     /// <summary>Collapse All Merges。切り替えると個別に開閉したマージ（collapse_toggled_shas）は空に戻る。</summary>
-    public Task ToggleCollapseAllMergesAsync() => SetWorktreeOptionAsync(c => { c.CollapseAllMode = !CollapseAllMerges; c.CollapseToggledShas = []; });
+    public Task ToggleCollapseAllMergesAsync() { var v = !CollapseAllMerges; return SetWorktreeOptionAsync(c => { c.CollapseAllMode = v; c.CollapseToggledShas = []; }); }
 
     /// <summary>
     /// マージを 1 つたたむ・開く（← / →、ノードのクリック）。worktree-config.toml の collapse_toggled_shas に 40 桁の SHA を足し引きする
@@ -308,15 +319,16 @@ public sealed partial class RepositoryViewModel : ObservableObject, IRevisionDet
         var c = row.Commit;
         var isMerge = (c.Parents.Count > 1 && !c.IsStash) || c.IsCollapsedMerge;
         if (!isMerge || c.IsCollapsedMerge == collapsed) return Task.CompletedTask;
+        var sha = c.Sha;
         return SetWorktreeOptionAsync(w =>
         {
             var list = (w.CollapseToggledShas ?? []).ToList();
-            if (!list.Remove(c.Sha)) list.Add(c.Sha);
+            if (!list.Remove(sha)) list.Add(sha);
             w.CollapseToggledShas = list;
         });
     }
     /// <summary>Filter by Active Branch（filter_references = ["HEAD"]）/ Clear Branch Filter（空に）。</summary>
-    public Task ToggleActiveBranchFilterAsync() => SetWorktreeOptionAsync(c => c.FilterReferences = IsFiltered ? [] : ["HEAD"]);
+    public Task ToggleActiveBranchFilterAsync() { var clear = IsFiltered; return SetWorktreeOptionAsync(c => c.FilterReferences = clear ? [] : ["HEAD"]); }
 
     public async Task ToggleReflogAsync()
     {
@@ -333,52 +345,93 @@ public sealed partial class RepositoryViewModel : ObservableObject, IRevisionDet
     }
 
     /// <summary>サイドバーの FilterButton / HideButton。付いていれば外し、無ければ足す。worktree-config.toml に書いて読み直す。</summary>
-    public async Task ToggleReferenceFilterAsync(SidebarItem item, bool hide)
+    public Task ToggleReferenceFilterAsync(SidebarItem item, bool hide)
     {
-        if (LoadWorktreeConfig() is not { } c) return;
-        c.EnsureDefaults();
-        var list = (hide ? c.HiddenReferences : c.FilterReferences).ToList();
-        if (item.FilterPatterns.All(list.Contains)) list.RemoveAll(item.FilterPatterns.Contains);
-        else list.AddRange(item.FilterPatterns.Where(p => !list.Contains(p)));
-        if (hide) c.HiddenReferences = list; else c.FilterReferences = list;
-        try { c.Save(); } catch (System.IO.IOException ex) { Log.Warning($"Saving worktree config failed: {ex.Message}"); }
-        await RefreshAsync();
+        var patterns = item.FilterPatterns.ToList();
+        return SetWorktreeOptionAsync(c =>
+        {
+            var list = (hide ? c.HiddenReferences : c.FilterReferences).ToList();
+            if (patterns.All(list.Contains)) list.RemoveAll(patterns.Contains);
+            else list.AddRange(patterns.Where(p => !list.Contains(p)));
+            if (hide) c.HiddenReferences = list; else c.FilterReferences = list;
+        });
     }
 
     /// <summary>サイドバーの PinButton：config.toml の pinned_references に足す・外す。</summary>
     public async Task TogglePinAsync(SidebarItem item)
     {
         if (item.Reference is not { } r || CommonGitDirectory is not { } common) return;
-        var config = Core.Settings.RepositoryConfig.Load(common);
-        config.EnsureDefaults();
-        var list = config.PinnedReferences.ToList();
-        if (!list.Remove(r.CanonicalName)) list.Add(r.CanonicalName);
-        config.PinnedReferences = list;
-        try { config.Save(); } catch (System.IO.IOException ex) { Log.Warning($"Saving repository config failed: {ex.Message}"); }
+        var name = r.CanonicalName;
+        await QueueConfigWrite(() =>
+        {
+            var config = Core.Settings.RepositoryConfig.Load(common);
+            config.EnsureDefaults();
+            var list = config.PinnedReferences.ToList();
+            if (!list.Remove(name)) list.Add(name);
+            config.PinnedReferences = list;
+            config.Save();
+        });
         await RefreshAsync();
     }
 
     /// <summary>帯の Clear filter。</summary>
     [RelayCommand]
-    private async Task ClearFilter()
+    private Task ClearFilter() => SetWorktreeOptionAsync(c => c.FilterReferences = []);
+
+    // ---------------------------------------------------------- 設定ファイル（.git/gitknife/*.toml）の読み書き
+    // SSH の先では 1 回ごとに往復があり、回線しだいで長くかかるので、どれも UI のスレッドの外で行う。
+    // 書き込みは順に並べ（前の書き込みを後の書き込みが上書きしないように）、読み直しは並んだ書き込みが終わってから読む。
+
+    private Task _configWrites = Task.CompletedTask;
+    private static readonly List<Task> s_pendingWrites = [];
+
+    /// <summary>設定ファイルへの書き込みを並べる（UI のスレッドから呼ぶ。write は裏のスレッドで動く）。失敗はログに書く。</summary>
+    internal Task QueueConfigWrite(Action write)
     {
-        if (LoadWorktreeConfig() is not { } c) return;
-        c.EnsureDefaults();
-        c.FilterReferences = [];
-        try { c.Save(); } catch (System.IO.IOException) { }
-        await RefreshAsync();
+        var task = _configWrites.ContinueWith(_ =>
+        {
+            try { write(); }
+            catch (Exception ex) { Log.Warning($"Saving repository settings of '{Path}' failed: {ex.Message}"); }
+        }, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
+        _configWrites = task;
+        lock (s_pendingWrites) { s_pendingWrites.RemoveAll(t => t.IsCompleted); s_pendingWrites.Add(task); }
+        return task;
     }
 
-    private Core.Settings.WorktreeConfig? LoadWorktreeConfig() => GitDirectory is { } dir ? Core.Settings.WorktreeConfig.Load(dir) : null;
+    /// <summary>並んでいる設定の書き込みが終わるまで待つ（アプリの終了時。timeout まで）。</summary>
+    public static void FlushConfigWrites(TimeSpan timeout)
+    {
+        Task[] tasks;
+        lock (s_pendingWrites) tasks = [.. s_pendingWrites];
+        try { Task.WaitAll(tasks, timeout); } catch (AggregateException) { }
+    }
+
+    /// <summary>worktree-config.toml を読んで change で変えて書く（裏のスレッドで）。</summary>
+    private Task UpdateWorktreeConfigAsync(Action<Core.Settings.WorktreeConfig> change)
+    {
+        if (GitDirectory is not { } dir) return Task.CompletedTask;
+        return QueueConfigWrite(() =>
+        {
+            var c = Core.Settings.WorktreeConfig.Load(dir);
+            c.EnsureDefaults();
+            change(c);
+            c.Save();
+        });
+    }
+
+    /// <summary>並んでいる書き込みが終わってから、裏のスレッドで読む。</summary>
+    private async Task<T> ReadConfigAsync<T>(Func<T> read)
+    {
+        await _configWrites;
+        return await Core.Git.HostIO.RunAsync(read);
+    }
 
     private bool _sidebarExpandedLoaded;
 
     private void SaveSidebarExpanded()
     {
-        if (LoadWorktreeConfig() is not { } c) return;
-        c.EnsureDefaults();
-        c.ExpandedSidebarItems = Sidebar.ExpandedPaths();
-        try { c.Save(); } catch (System.IO.IOException ex) { Log.Warning($"Saving worktree config failed: {ex.Message}"); }
+        var expanded = Sidebar.ExpandedPaths();
+        _ = UpdateWorktreeConfigAsync(c => c.ExpandedSidebarItems = expanded);
     }
 
     private bool _draftLoaded;
@@ -389,16 +442,20 @@ public sealed partial class RepositoryViewModel : ObservableObject, IRevisionDet
     /// </summary>
     public void SaveDraft()
     {
-        if (IsManager || LoadWorktreeConfig() is not { } c) return;
+        // 読み込む前（開いてすぐ閉じた）に書くと、保存してあった下書きを空で消してしまう
+        if (IsManager || GitDirectory is null || !_draftLoaded) return;
         var message = LocalChanges.Description.Trim().Length > 0 ? LocalChanges.Subject + "\n\n" + LocalChanges.Description.TrimEnd() : LocalChanges.Subject;
-        if (c.DraftMessage == message) return;
-        c.EnsureDefaults();
-        c.DraftMessage = message;
-        try { c.Save(); } catch (System.IO.IOException ex) { Log.Warning($"Saving worktree config failed: {ex.Message}"); }
+        if (_savedDraft == message) return;
+        _savedDraft = message;
+        _ = UpdateWorktreeConfigAsync(c => c.DraftMessage = message);
     }
+
+    /// <summary>最後に読んだ・書いた下書き（同じなら書かない）。</summary>
+    private string? _savedDraft;
 
     private void LoadDraft(string? draft)
     {
+        _savedDraft = draft ?? "";
         if (_draftLoaded) return;
         _draftLoaded = true;
         if (string.IsNullOrEmpty(draft) || LocalChanges.Subject.Length > 0) return;
@@ -447,8 +504,9 @@ public sealed partial class RepositoryViewModel : ObservableObject, IRevisionDet
 
     /// <summary>Lean Branching のメインブランチ（Repository Settings の "Main Branch:"。config.toml の lean_branching_main_branch、無ければ既定）。</summary>
     public string LeanMainBranch
-        => (CommonGitDirectory is { } common ? Core.Settings.RepositoryConfig.Load(common).LeanBranchingMainBranch : null)
-           ?? DefaultMainBranch(References?.LocalBranches.Select(b => b.ShortName).ToList() ?? []);
+        => _leanMainBranch ?? DefaultMainBranch(References?.LocalBranches.Select(b => b.ShortName).ToList() ?? []);
+    /// <summary>読み直しで読んだ config.toml の lean_branching_main_branch。</summary>
+    private string? _leanMainBranch;
     /// <summary>Issue Tracker のルール（コミット詳細のメッセージのリンク。Controls/IssueLinkText）。</summary>
     [ObservableProperty] private IReadOnlyList<Core.Settings.IssueTrackerRule> _issueRules = [];
     [ObservableProperty] private string? _error;
@@ -575,15 +633,24 @@ public sealed partial class RepositoryViewModel : ObservableObject, IRevisionDet
             Interlocked.Exchange(ref _lastRefreshStartTicks, startTicks);
             Interlocked.Exchange(ref _lastFullRefreshStartTicks, startTicks);
             if (!await EnsureOpenAsync()) return;
+            // 設定ファイル（worktree-config.toml、config.toml、issuetracker、.gitmodules）は UI のスレッドの外で、git の読み取りと並べて読む
+            var gitDirectory = GitDirectory!;
+            var common = CommonGitDirectory!;
+            var path = Path;
+            var bugtrackerLinks = _settings.ShowBugtrackerLinks;
+            var wtTask = ReadConfigAsync(() => Core.Settings.WorktreeConfig.Load(gitDirectory));
+            var sideTask = ReadConfigAsync(() => LoadSideData(common, path, bugtrackerLinks));
             var refs = await _reader!.ReadReferencesAsync();
             var statusTask = _reader!.ReadStatusAsync(ShowIgnored);
+            var operationTask = _reader.ReadOperationStateAsync(refs);
             // サイドバーの Filter / Hide（worktree-config.toml）
-            var wt = LoadWorktreeConfig();
+            var wt = await wtTask;
             FilterReferences = wt?.FilterReferences ?? [];
             HiddenReferences = wt?.HiddenReferences ?? [];
             HideTags = wt?.HideTags ?? false;
             HideStashes = wt?.HideStashes ?? false;
             CollapseAllMerges = wt?.CollapseAllMode ?? false;
+            _hideUntracked = wt?.HideUntrackedFiles ?? false;
             LoadDraft(wt?.DraftMessage);
             var toggled = (wt?.CollapseToggledShas ?? []).ToHashSet();
             // View の表示オプション。Reflog のあいだは Filter を効かせない（帯も Reflog の方）
@@ -600,6 +667,8 @@ public sealed partial class RepositoryViewModel : ObservableObject, IRevisionDet
                 IncludeReflog = ShowReflog,
             }, refs);
             var status = await statusTask;
+            var side = await sideTask;
+            var operation = await operationTask;
             // 後から始めた読み直しがあれば、古い内容で上書きしない（Issue #12）
             if (generation != _refreshGeneration) return;
             // マージの折りたたみ（Collapse All Merges も含めて、読んだあとでたたむ）
@@ -616,21 +685,22 @@ public sealed partial class RepositoryViewModel : ObservableObject, IRevisionDet
             var selectedSha = SelectedCommit?.Commit.Sha;
             References = refs;
             Status = status;
-            UpdateNotification();
+            ApplyNotification(operation);
             LocalChanges.Load(Status);
             LocalChanges.LoadRecentMessages(rows);
-            var repoConfig = CommonGitDirectory is { } common ? Core.Settings.RepositoryConfig.Load(common) : null;
-            var pins = repoConfig?.PinnedReferences ?? [];
-            // コミットのメッセージの課題番号のリンク（Preferences と Repository Settings の両方がオンのとき）
-            IssueRules = _settings.ShowBugtrackerLinks && repoConfig?.ShowBugtrackerLinks != false && CommonGitDirectory is { } gitDir
-                ? Core.Settings.IssueTracker.Load(gitDir, Path) : [];
-            Submodules = Core.Git.GitModules.Read(Path);
+            var pins = side.Pins;
+            IssueRules = side.IssueRules;
+            Submodules = side.Submodules;
+            _leanMainBranch = side.LeanMainBranch;
+            _implicitFetchDisabled = side.ImplicitFetchDisabled;
+            Search.SetRecent(side.RecentSearches);
+            CachedCustomCommands = side.CustomCommands;
             var changedSubmodules = Status.Entries.Where(e => e.IsSubmodule).Select(e => e.Path).ToHashSet();
             if (!_sidebarExpandedLoaded)
             {
                 // 最初の読み込みで worktree-config.toml の expanded_sidebar_items を当て、変えたら書く
                 _sidebarExpandedLoaded = true;
-                Sidebar.UseSavedExpanded(LoadWorktreeConfig()?.ExpandedSidebarItems);
+                Sidebar.UseSavedExpanded(wt?.ExpandedSidebarItems);
                 Sidebar.ExpandedChanged += SaveSidebarExpanded;
             }
             // worktree のパスと比べるのは git が返す場所（割り当てたドライブ U: は git では //wsl.localhost/... になる。2026-10-27 main だけなのに Worktrees が出た）
@@ -660,6 +730,30 @@ public sealed partial class RepositoryViewModel : ObservableObject, IRevisionDet
             Log.Error($"Refresh '{Name}' failed: {ex}");
         }
         finally { IsBusy = false; }
+    }
+
+    /// <summary>読み直しのたびに読む設定（UI のスレッドの外で読む）。</summary>
+    private sealed record SideData(IReadOnlyList<string> Pins, IReadOnlyList<Core.Settings.IssueTrackerRule> IssueRules,
+        IReadOnlyList<Core.Git.SubmoduleInfo> Submodules, string? LeanMainBranch, IReadOnlySet<string> ImplicitFetchDisabled,
+        IReadOnlyList<Core.Git.RevisionSearchQuery> RecentSearches, IReadOnlyList<Core.Settings.CustomCommand>? CustomCommands);
+
+    /// <summary>
+    /// SSH の先のリポジトリのカスタムコマンド（Shared と Local。読み直しで読む）。メニューは UI のスレッドで作るので、往復を待たずに済むようにする。
+    /// それ以外のリポジトリは null（メニューを開くたびに読む）。
+    /// </summary>
+    public IReadOnlyList<Core.Settings.CustomCommand>? CachedCustomCommands { get; private set; }
+
+    private static SideData LoadSideData(string common, string path, bool bugtrackerLinks)
+    {
+        var repoConfig = Core.Settings.RepositoryConfig.Load(common);
+        // コミットのメッセージの課題番号のリンク（Preferences と Repository Settings の両方がオンのとき）
+        var rules = bugtrackerLinks && repoConfig.ShowBugtrackerLinks ? Core.Settings.IssueTracker.Load(common, path) : [];
+        return new SideData(repoConfig.PinnedReferences, rules, Core.Git.GitModules.Read(path), repoConfig.LeanBranchingMainBranch,
+            ReadImplicitFetchDisabled(System.IO.Path.Combine(common, "config")), repoConfig.RecentRevisionSearchQueries,
+            Core.Git.SshPath.IsSshPath(path)
+                ? [.. Core.Settings.CustomCommandStore.LoadFile(Core.Settings.CustomCommandStore.SharedPath(path), Core.Settings.CustomCommandSource.Shared),
+                   .. Core.Settings.CustomCommandStore.LoadFile(Core.Settings.CustomCommandStore.LocalPath(common), Core.Settings.CustomCommandSource.Local)]
+                : null);
     }
 
     private async Task<bool> EnsureOpenAsync()
@@ -820,7 +914,7 @@ public sealed partial class RepositoryViewModel : ObservableObject, IRevisionDet
             if (!await EnsureOpenAsync()) return;
             Interlocked.Exchange(ref _lastRefreshStartTicks, Environment.TickCount64);
             Status = await _reader!.ReadStatusAsync(ShowIgnored);
-            UpdateNotification();
+            if (References is { } refs) ApplyNotification(await _reader.ReadOperationStateAsync(refs));
             LocalChanges.Load(Status);
             Sidebar.SetChangedSubmodules(Status.Entries.Where(e => e.IsSubmodule).Select(e => e.Path).ToHashSet());
         }
@@ -831,11 +925,9 @@ public sealed partial class RepositoryViewModel : ObservableObject, IRevisionDet
         }
     }
 
-    private void UpdateNotification()
+    private void ApplyNotification(OperationState state)
     {
-        if (_reader is null || References is null) return;
         var conflicts = Status?.Entries.Count(e => e.IsConflicted) ?? 0;
-        var state = _reader.ReadOperationState(References);
         // 操作の印が無くても競合したファイルがあれば帯を出す（2026-10-27 Frieve-Editor：Pull の autostash を戻したときの競合）
         if (state.Operation == RepositoryOperation.None && conflicts > 0) state = new OperationState(RepositoryOperation.Unmerged, "", References?.HeadBranch ?? "");
         Notification.Update(state, conflicts, References?.HeadSha);

@@ -11,7 +11,8 @@ namespace GitKnife.Views;
 
 /// <summary>
 /// カスタムコマンドのメニュー項目と実行。
-/// ファイルはメニューを開くたびに読み直す。
+/// ファイルはメニューを開くたびに読み直す。ただし SSH の先のリポジトリのファイル（Shared と Local）は、読み直し（RefreshAsync）で
+/// 読んだものを使う（メニューは UI のスレッドで作るので、往復を待たない）。
 /// </summary>
 internal static class CustomCommandMenus
 {
@@ -22,7 +23,10 @@ internal static class CustomCommandMenus
     public static void AddTo(ItemsControl menu, RepositoryViewModel repo, string target, Func<CustomCommandContext> context,
         CustomCommandRefKind? refKind = null, bool header = false)
     {
-        var commands = CustomCommandStore.For(CustomCommandStore.Load(repo.Path, repo.CommonGitDirectory), target, refKind);
+        IReadOnlyList<CustomCommand> all = repo.CachedCustomCommands is { } cached
+            ? [.. CustomCommandStore.LoadFile(CustomCommandStore.GlobalPath, CustomCommandSource.Global), .. cached]
+            : CustomCommandStore.Load(repo.Path, repo.CommonGitDirectory);
+        var commands = CustomCommandStore.For(all, target, refKind);
         if (commands.Count == 0) return;
         if (menu.Items.Count > 0 && menu.Items[^1] is not Separator) menu.Items.Add(new Separator());
         if (header) menu.Items.Add(new MenuItem { Header = "Custom Commands", IsEnabled = false });
@@ -75,15 +79,20 @@ internal static class CustomCommandMenus
         // Shared のコマンドは、信頼していなければ先に確かめる
         if (command.Source == CustomCommandSource.Shared && repo.CommonGitDirectory is { } common)
         {
-            var config = RepositoryConfig.Load(common);
-            if (!config.TrustSharedCommands)
+            var trusted = await Busy.IoAsync(null, "Loading repository settings...", () => RepositoryConfig.Load(common).TrustSharedCommands);
+            if (!trusted)
             {
                 var confirm = new SharedCustomCommandConfirmDialogViewModel(System.IO.Path.GetFileName(repo.Path.TrimEnd('\\', '/')));
                 if (Dialogs.DialogWindow.Run(confirm, out _) != true) return;
                 if (confirm.Trust)
                 {
-                    config.TrustSharedCommands = true;
-                    config.Save();
+                    _ = repo.QueueConfigWrite(() =>
+                    {
+                        var config = RepositoryConfig.Load(common);
+                        config.EnsureDefaults();
+                        config.TrustSharedCommands = true;
+                        config.Save();
+                    });
                 }
             }
         }

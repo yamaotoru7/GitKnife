@@ -83,12 +83,17 @@ public sealed class WorkingTree(GitProcess git, string workingDirectory, string 
         var list = entries.ToList();
         var tracked = list.Where(e => !e.IsUntracked).Select(e => e.Path).ToList();
         if (tracked.Count > 0) (await Run(GitArgs.DiscardFiles(), GitArgs.NulSeparated(tracked), ct).ConfigureAwait(false)).ThrowIfFailed();
-        foreach (var e in list.Where(e => e.IsUntracked))
+        var untracked = list.Where(e => e.IsUntracked).ToList();
+        if (untracked.Count == 0) return;
+        await HostIO.RunAsync(() =>
         {
-            var full = Path.Combine(WorkingDirectory, e.Path.Replace('/', Path.DirectorySeparatorChar));
-            if (HostFile.Exists(full)) HostFile.Delete(full);
-            else if (HostDirectory.Exists(full)) HostDirectory.Delete(full, recursive: true);
-        }
+            foreach (var e in untracked)
+            {
+                var full = Path.Combine(WorkingDirectory, e.Path.Replace('/', Path.DirectorySeparatorChar));
+                if (HostFile.Exists(full)) HostFile.Delete(full);
+                else if (HostDirectory.Exists(full)) HostDirectory.Delete(full, recursive: true);
+            }
+        }, ct).ConfigureAwait(false);
     }
 
     /// <summary><see cref="PatchBuilder"/> で同じ target 用に作ったパッチを当てる。</summary>
@@ -125,7 +130,8 @@ public sealed class WorkingTree(GitProcess git, string workingDirectory, string 
     /// </summary>
     public async Task<(IReadOnlyList<ConflictCommit> ours, IReadOnlyList<ConflictCommit> theirs)> ReadConflictCommitsAsync(string path, CancellationToken ct = default)
     {
-        var theirsRef = new[] { "MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "REBASE_HEAD" }.FirstOrDefault(n => HostFile.Exists(Path.Combine(GitDirectory, n)));
+        var names = await HostIO.RunAsync(() => HostDirectory.EntryNames(GitDirectory), ct).ConfigureAwait(false);
+        var theirsRef = new[] { "MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "REBASE_HEAD" }.FirstOrDefault(names.Contains);
         if (theirsRef is null) return ([], []);
         var oursSha = (await Run(["rev-parse", "HEAD"], ct: ct).ConfigureAwait(false)).StandardOutput.Trim();
         var theirsSha = (await Run(["rev-parse", theirsRef], ct: ct).ConfigureAwait(false)).StandardOutput.Trim();
@@ -182,6 +188,6 @@ public sealed class WorkingTree(GitProcess git, string workingDirectory, string 
         var path = r.StandardOutput.Trim();
         if (path.StartsWith("~/", StringComparison.Ordinal)) path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), path[2..]);
         if (!Path.IsPathRooted(path)) path = Path.Combine(WorkingDirectory, path);
-        return HostFile.Exists(path) ? await HostFile.ReadAllTextAsync(path, ct).ConfigureAwait(false) : null;
+        return await HostIO.RunAsync(() => HostFile.Exists(path) ? HostFile.ReadAllText(path) : null, ct).ConfigureAwait(false);
     }
 }
