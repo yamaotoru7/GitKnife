@@ -18,8 +18,12 @@ public partial class RevisionDetailsView : UserControl
         TreeKeys.AttachFiles(FilesTree, f => _details?.ToggleTreeFolder(f));
         // Ctrl+F で今のモードのファイル一覧の絞り込み。押した所がフォーカスを取らなければファイル一覧に移す（押した後で見る）
         PreviewKeyDown += OnPreviewKeyDown;
-        // （タブを押したときはモードが替わって一覧が描かれてから）
-        PreviewMouseUp += (_, _) => Dispatcher.BeginInvoke(FocusPaneIfLost, System.Windows.Threading.DispatcherPriority.Loaded);
+        // （タブを押したときはモードが替わって一覧が描かれてから。右クリックは右クリックメニューがフォーカスを取るので見ない）
+        PreviewMouseUp += (_, e) =>
+        {
+            if (e.ChangedButton == System.Windows.Input.MouseButton.Left)
+                Dispatcher.BeginInvoke(FocusPaneIfLost, System.Windows.Threading.DispatcherPriority.Loaded);
+        };
         DataContextChanged += (_, e) =>
         {
             if (_details is not null) _details.PropertyChanged -= OnDetailsChanged;
@@ -194,6 +198,8 @@ public partial class RevisionDetailsView : UserControl
     private void FocusPaneIfLost()
     {
         if (IsKeyboardFocusWithin) return;
+        // メニューやポップアップ（ContextMenu、ドロップダウン）にフォーカスがあるときは奪わない（奪うと閉じてしまう）
+        if (System.Windows.Input.Keyboard.FocusedElement is DependencyObject f && PresentationSource.FromDependencyObject(f) is { } src && src != PresentationSource.FromVisual(this)) return;
         var list = (DataContext as IRevisionDetailsHost)?.DetailsMode switch
         {
             DetailsMode.Changes => ChangesList,
