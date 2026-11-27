@@ -188,7 +188,7 @@
                         <!-- 動いているジョブを止める（ふだんは出ない） -->
                         <Button AutomationProperties.AutomationId="CancelButton" Style="{StaticResource Gk.HeaderIconButton}" Width="16" Height="16" HorizontalAlignment="Right" Margin="0,0,6,0"
                                 ToolTip="Cancel" Click="CancelJob_Click" Visibility="{Binding SelectedTab.IsStatusJobRunning, Converter={StaticResource Gk.BoolToVisibility}}">
-                            <Path Style="{StaticResource Gk.IconPath}" Data="{StaticResource Icon.Close}" Width="10" Height="10"/>
+                            <Path Style="{StaticResource Gk.IconPath}" Data="{StaticResource Icon.Close}" Width="10" Height="10" Stretch="Uniform"/>
                         </Button>
                         <!-- 下端 3px の進捗：実行中は git の割合（まだ無ければ短いバー）、終わったらいっぱいにして約 3 秒 -->
                         <ProgressBar AutomationProperties.AutomationId="StatusProgressBar" Height="3" VerticalAlignment="Bottom" BorderThickness="0" Maximum="100"
@@ -243,7 +243,7 @@
                                 <TextBlock Text="{Binding Tab.Name}" Margin="38,0,24,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
                                 <Button x:Name="CloseButton" AutomationProperties.AutomationId="CloseButton" Style="{StaticResource Gk.FlatButton}" HorizontalAlignment="Right" Width="18" Height="18" Margin="0,0,4,0"
                                         Padding="0" Opacity="0" Click="TabListClose_Click" ToolTip="Close Tab">
-                                    <Path Style="{StaticResource Gk.IconPath}" Data="{StaticResource Icon.Close}" Width="10" Height="10"/>
+                                    <Path Style="{StaticResource Gk.IconPath}" Data="{StaticResource Icon.Close}" Width="10" Height="10" Stretch="Uniform"/>
                                 </Button>
                             </Grid>
                             <DataTemplate.Triggers>

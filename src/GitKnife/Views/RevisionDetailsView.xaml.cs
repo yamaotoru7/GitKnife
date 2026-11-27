@@ -16,6 +16,10 @@ public partial class RevisionDetailsView : UserControl
         // ← / → でフォルダの開閉と親・子へ
         TreeKeys.AttachFiles(ChangesList, f => _details?.ToggleChangeFolder(f));
         TreeKeys.AttachFiles(FilesTree, f => _details?.ToggleTreeFolder(f));
+        // Ctrl+F で今のモードのファイル一覧の絞り込み。押した所がフォーカスを取らなければファイル一覧に移す（押した後で見る）
+        PreviewKeyDown += OnPreviewKeyDown;
+        // （タブを押したときはモードが替わって一覧が描かれてから）
+        PreviewMouseUp += (_, _) => Dispatcher.BeginInvoke(FocusPaneIfLost, System.Windows.Threading.DispatcherPriority.Loaded);
         DataContextChanged += (_, e) =>
         {
             if (_details is not null) _details.PropertyChanged -= OnDetailsChanged;
@@ -155,15 +159,56 @@ public partial class RevisionDetailsView : UserControl
     private void ChangesSearch_Click(object sender, RoutedEventArgs e)
     {
         if (ChangesFilterPanel.Visibility == Visibility.Visible) { CloseChangesFilter(); return; }
+        OpenChangesFilter();
+    }
+
+    private void OpenChangesFilter()
+    {
         ChangesFilterPanel.Visibility = Visibility.Visible;
-        ChangesFilterTextBox.Focus();
-        ChangesFilterTextBox.SelectAll();
+        // 出したばかりの欄はまだ描かれていないので、描いてからフォーカスを移す
+        Dispatcher.BeginInvoke(() =>
+        {
+            ChangesFilterTextBox.Focus();
+            ChangesFilterTextBox.SelectAll();
+        }, System.Windows.Threading.DispatcherPriority.Input);
+    }
+
+    /// <summary>
+    /// 詳細ペインのどこか（タブ、ファイル一覧、diff、プレビュー）にフォーカスがあるときの Ctrl+F：
+    /// Changes / File Tree ならファイル一覧の絞り込みの欄を出す（コミット一覧の検索より先に取る）。
+    /// </summary>
+    private void OnPreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key != System.Windows.Input.Key.F || System.Windows.Input.Keyboard.Modifiers != System.Windows.Input.ModifierKeys.Control) return;
+        switch ((DataContext as IRevisionDetailsHost)?.DetailsMode)
+        {
+            case DetailsMode.Changes: OpenChangesFilter(); e.Handled = true; break;
+            case DetailsMode.FileTree when FileTreeRadio.IsEnabled: OpenTreeFilter(); e.Handled = true; break;
+        }
+    }
+
+    /// <summary>
+    /// フォーカスを取らない所（一覧の下の空き、見出し、タブ）を押したときは、今のモードのファイル一覧にフォーカスを移す
+    /// （フォーカスがコミット一覧に残っていると、Ctrl+F がコミット一覧の検索になる）。
+    /// </summary>
+    private void FocusPaneIfLost()
+    {
+        if (IsKeyboardFocusWithin) return;
+        var list = (DataContext as IRevisionDetailsHost)?.DetailsMode switch
+        {
+            DetailsMode.Changes => ChangesList,
+            DetailsMode.FileTree => FilesTree,
+            _ => null,
+        };
+        if (list is null) return;
+        if (list.SelectedItem is { } item && list.ItemContainerGenerator.ContainerFromItem(item) is ListViewItem row) row.Focus();
+        else list.Focus();
     }
 
     private void CloseChangesFilter()
     {
         ChangesFilterPanel.Visibility = Visibility.Collapsed;
-        if (DataContext is ViewModels.RevisionDetailsViewModel vm) vm.ChangeFilter = "";
+        if (_details is not null) _details.ChangeFilter = "";
     }
 
     private void ChangesFilterClose_Click(object sender, RoutedEventArgs e) => CloseChangesFilter();
@@ -173,5 +218,61 @@ public partial class RevisionDetailsView : UserControl
         if (e.Key != System.Windows.Input.Key.Escape) return;
         CloseChangesFilter();
         e.Handled = true;
+    }
+
+    // ---- File Tree の絞り込み ----
+
+    private void TreeSearch_Click(object sender, RoutedEventArgs e)
+    {
+        if (_details is null) return;
+        if (_details.IsTreeFilterOpen) { _details.IsTreeFilterOpen = false; return; }
+        OpenTreeFilter();
+    }
+
+    private void OpenTreeFilter()
+    {
+        if (_details is null) return;
+        _details.IsTreeFilterOpen = true;
+        // 出したばかりの欄はまだ描かれていないので、描いてからフォーカスを移す
+        Dispatcher.BeginInvoke(() =>
+        {
+            TreeFilterTextBox.Focus();
+            TreeFilterTextBox.SelectAll();
+        }, System.Windows.Threading.DispatcherPriority.Input);
+    }
+
+    private void TreeFilterClose_Click(object sender, RoutedEventArgs e)
+    {
+        if (_details is not null) _details.IsTreeFilterOpen = false;
+        FilesTree.Focus();
+    }
+
+    private void TreeFilter_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case System.Windows.Input.Key.Escape:
+                if (_details is not null) _details.IsTreeFilterOpen = false;
+                FilesTree.Focus();
+                e.Handled = true;
+                break;
+            case System.Windows.Input.Key.Down or System.Windows.Input.Key.Enter:
+                // 一覧へ移る（選んでいなければ最初のファイルを選ぶ）
+                if (_details is null || _details.TreeRows.Count == 0) break;
+                _details.SelectedTreeFile ??= _details.TreeRows.FirstOrDefault(r => !r.IsFolder) ?? _details.TreeRows[0];
+                FocusSelectedTreeRow();
+                e.Handled = true;
+                break;
+        }
+    }
+
+    private void FocusSelectedTreeRow()
+    {
+        if (FilesTree.SelectedItem is not { } item) { FilesTree.Focus(); return; }
+        FilesTree.ScrollIntoView(item);
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (FilesTree.ItemContainerGenerator.ContainerFromItem(item) is ListViewItem row) row.Focus(); else FilesTree.Focus();
+        }, System.Windows.Threading.DispatcherPriority.Input);
     }
 }

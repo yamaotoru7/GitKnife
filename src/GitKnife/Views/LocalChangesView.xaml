@@ -42,7 +42,7 @@
                             <!-- × で閉じる（Esc と同じ。絞り込みも消える） -->
                             <Button AutomationProperties.AutomationId="PART_ClearButton" Style="{StaticResource Gk.HeaderIconButton}" HorizontalAlignment="Right" Width="16" Height="16"
                                     ToolTip="Close" Click="FilterClose_Click">
-                                <Path Style="{StaticResource Gk.IconPath}" Data="{StaticResource Icon.Close}" Width="8" Height="8"/>
+                                <Path Style="{StaticResource Gk.IconPath}" Data="{StaticResource Icon.Close}" Width="8" Height="8" Stretch="Uniform"/>
                             </Button>
                         </Grid>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,2,0">

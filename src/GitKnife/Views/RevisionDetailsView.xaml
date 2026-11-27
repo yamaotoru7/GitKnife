@@ -271,7 +271,7 @@
                                              FontSize="11" Text="{Binding ChangeFilter, UpdateSourceTrigger=PropertyChanged}" PreviewKeyDown="ChangesFilter_PreviewKeyDown"/>
                                     <Button AutomationProperties.AutomationId="PART_ClearButton" Style="{StaticResource Gk.HeaderIconButton}" HorizontalAlignment="Right" Width="16" Height="16"
                                             ToolTip="Close" Click="ChangesFilterClose_Click">
-                                        <Path Style="{StaticResource Gk.IconPath}" Data="{StaticResource Icon.Close}" Width="8" Height="8"/>
+                                        <Path Style="{StaticResource Gk.IconPath}" Data="{StaticResource Icon.Close}" Width="8" Height="8" Stretch="Uniform"/>
                                     </Button>
                                 </Grid>
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,2,0">
@@ -311,7 +311,28 @@
                     <ColumnDefinition Width="1"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
-                <ListView x:Name="FilesTree" AutomationProperties.AutomationId="FilesTreeView" ItemsSource="{Binding TreeRows}" SelectedItem="{Binding SelectedTreeFile}" SelectionMode="Single" ContextMenuOpening="FileTree_ContextMenuOpening" PreviewMouseRightButtonDown="FileTree_PreviewMouseRightButtonDown"
+                <Grid Background="{DynamicResource Gk.List.Background}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="18"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Border Background="{DynamicResource Gk.Header.Background}">
+                    <Grid>
+                        <Button AutomationProperties.AutomationId="FileTreeFilterButton" Style="{StaticResource Gk.HeaderIconButton}" HorizontalAlignment="Left" ToolTip="Filter (Ctrl+F)" Click="TreeSearch_Click">
+                            <Path Style="{StaticResource Gk.SmallIcon}" Data="{StaticResource Icon.Search}"/>
+                        </Button>
+                        <!-- 絞り込み（打つたびに一致したファイルだけを、親フォルダを開いて出す。Esc / × で閉じると絞り込みも消える） -->
+                        <Grid x:Name="TreeFilterPanel" Margin="20,0,4,0" Visibility="{Binding IsTreeFilterOpen, Converter={StaticResource Gk.BoolToVisibility}}">
+                            <TextBox x:Name="TreeFilterTextBox" AutomationProperties.AutomationId="FilterTextBox" Style="{StaticResource Gk.TextBox}" Padding="2,0,16,0"
+                                     FontSize="11" Text="{Binding TreeFilter, UpdateSourceTrigger=PropertyChanged}" PreviewKeyDown="TreeFilter_PreviewKeyDown"/>
+                            <Button AutomationProperties.AutomationId="PART_ClearButton" Style="{StaticResource Gk.HeaderIconButton}" HorizontalAlignment="Right" Width="16" Height="16"
+                                    ToolTip="Close" Click="TreeFilterClose_Click">
+                                <Path Style="{StaticResource Gk.IconPath}" Data="{StaticResource Icon.Close}" Width="8" Height="8" Stretch="Uniform"/>
+                            </Button>
+                        </Grid>
+                    </Grid>
+                </Border>
+                <ListView x:Name="FilesTree" Grid.Row="1" AutomationProperties.AutomationId="FilesTreeView" ItemsSource="{Binding TreeRows}" SelectedItem="{Binding SelectedTreeFile}" SelectionMode="Single" ContextMenuOpening="FileTree_ContextMenuOpening" PreviewMouseRightButtonDown="FileTree_PreviewMouseRightButtonDown"
                           Background="{DynamicResource Gk.List.Background}" BorderThickness="0" Padding="0,3" Foreground="{DynamicResource Gk.Text}"
                           ScrollViewer.HorizontalScrollBarVisibility="Disabled" ItemTemplate="{StaticResource Gk.FileRowTemplate}">
                     <ListView.ItemContainerStyle>
@@ -337,6 +358,7 @@
                     </ListView.ItemContainerStyle>
                     <ListView.ContextMenu><ContextMenu/></ListView.ContextMenu>
                 </ListView>
+                </Grid>
                 <GridSplitter Grid.Column="1" Style="{StaticResource Gk.SplitterStyle}" Width="1" HorizontalAlignment="Stretch" ResizeBehavior="PreviousAndNext"/>
                 <Grid Grid.Column="2" Background="{DynamicResource Gk.Diff.Background}">
                     <Grid.RowDefinitions>

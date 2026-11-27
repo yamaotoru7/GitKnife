@@ -364,10 +364,11 @@ public sealed partial class RevisionDetailsViewModel(RepositoryViewModel repo, I
                 var changed = new Dictionary<string, FileChange>(StringComparer.Ordinal);
                 foreach (var c in changes) changed[c.Path] = c.Index;
                 var entries = files.Select(f => new StatusEntry(f, changed.GetValueOrDefault(f, FileChange.Unmodified), FileChange.Unmodified));
-                var r = FileListItem.Build(entries, FileListMode.Tree, staged: true);
+                var list = entries.ToList();
+                var r = FileListItem.Build(list, FileListMode.Tree, staged: true);
                 // File Tree は最初はすべてのフォルダを畳んだ状態（Flatten は開いたフォルダにしか入らないので、Children を全部たどる）
                 Collapse(r);
-                return r;
+                return (Roots: r, Entries: list);
 
                 static void Collapse(List<FileListItem> items)
                 {
@@ -376,11 +377,59 @@ public sealed partial class RevisionDetailsViewModel(RepositoryViewModel repo, I
             });
             if (Commit != row) return;
             _treeLoadedFor = row.Commit.Sha;
-            _treeRoots = roots;
+            _treeRoots = roots.Roots;
+            _treeEntries = roots.Entries;
+            _filteredTreeRoots = null;
             SelectedTreeFile = null;   // 前のコミットの行は引き継がない
-            RebuildTreeRows();
+            if (TreeFilter.Trim().Length > 0) await ApplyTreeFilterAsync();
+            else RebuildTreeRows();
         }
         catch (Exception ex) { Log.Error($"ls-tree failed: {ex.Message}"); }
+    }
+
+    /// <summary>File Tree の全ファイル（絞り込みの元）。</summary>
+    private List<StatusEntry> _treeEntries = [];
+    /// <summary>絞り込んでいるときの行（一致したファイルとその親フォルダ。フォルダは開いておく）。絞り込んでいなければ null。</summary>
+    private List<FileListItem>? _filteredTreeRoots;
+    private CancellationTokenSource? _treeFilterCts;
+
+    /// <summary>File Tree の絞り込みの欄を出している（虫眼鏡か Ctrl+F で出す。閉じると絞り込みも消える）。</summary>
+    [ObservableProperty] private bool _isTreeFilterOpen;
+
+    /// <summary>
+    /// File Tree の絞り込み（大文字小文字を区別せず、パスの途中でも当たる。フォルダ名に当たればその中のファイルを全部出す。前後の空白は除く）。
+    /// </summary>
+    [ObservableProperty] private string _treeFilter = "";
+
+    partial void OnIsTreeFilterOpenChanged(bool value)
+    {
+        if (!value) TreeFilter = "";
+    }
+
+    partial void OnTreeFilterChanged(string value) => _ = ApplyTreeFilterAsync();
+
+    private async Task ApplyTreeFilterAsync()
+    {
+        _treeFilterCts?.Cancel();
+        var filter = TreeFilter.Trim();
+        if (filter.Length == 0)
+        {
+            if (_filteredTreeRoots is null) return;
+            _filteredTreeRoots = null;
+            RebuildTreeRows();
+            return;
+        }
+        var cts = _treeFilterCts = new CancellationTokenSource();
+        var all = _treeEntries;
+        try
+        {
+            // 全ファイルを見るので UI の外で（数万になることがある）
+            var roots = await Task.Run(() => FileListItem.Build(all.Where(e => e.Path.Contains(filter, StringComparison.OrdinalIgnoreCase)), FileListMode.Tree, staged: true), cts.Token);
+            if (cts.IsCancellationRequested || all != _treeEntries) return;
+            _filteredTreeRoots = roots;
+            RebuildTreeRows();
+        }
+        catch (OperationCanceledException) { }
     }
 
     public RepositoryViewModel Repository => repo;
@@ -389,6 +438,7 @@ public sealed partial class RevisionDetailsViewModel(RepositoryViewModel repo, I
     public async Task ShowInFileTreeAsync(string path)
     {
         _host.DetailsMode = DetailsMode.FileTree;
+        IsTreeFilterOpen = false;   // 絞り込みを外して全体の中で探す
         await LoadTreeAsync();
         FileListItem? found = null;
         bool Open(IEnumerable<FileListItem> items)
@@ -406,17 +456,18 @@ public sealed partial class RevisionDetailsViewModel(RepositoryViewModel repo, I
     }
 
     /// <summary>
-    /// 行を並べ直す。選んでいた行はそのまま選び、閉じたフォルダの中に隠れたらそのフォルダを選ぶ
-    /// （並べ直すと ListView が選択を外すので、その間の選択の変化は無視する）。
+    /// 行を並べ直す。選んでいた行（同じパスの行）はそのまま選び、閉じたフォルダの中に隠れたらそのフォルダを選ぶ
+    /// （並べ直すと ListView が選択を外すので、その間の選択の変化は無視する）。絞り込みを変えると行は作り直しになるので、パスで探す。
     /// </summary>
     private void RebuildTreeRows()
     {
         var selected = SelectedTreeFile;
         _rebuildingTree = true;
-        try { TreeRows.ReplaceAll(FileListItem.Flatten(_treeRoots)); }
+        try { TreeRows.ReplaceAll(FileListItem.Flatten(_filteredTreeRoots ?? _treeRoots)); }
         finally { _rebuildingTree = false; }
         if (selected is null) return;
-        var visible = TreeRows.Contains(selected) ? selected : TreeRows.Where(r => r.IsFolder && selected.Path.StartsWith(r.Path + "/", StringComparison.Ordinal)).FirstOrDefault(r => !r.IsExpanded);
+        var visible = TreeRows.FirstOrDefault(r => r.IsFolder == selected.IsFolder && r.Path == selected.Path)
+            ?? TreeRows.Where(r => r.IsFolder && selected.Path.StartsWith(r.Path + "/", StringComparison.Ordinal)).FirstOrDefault(r => !r.IsExpanded);
         SelectedTreeFile = visible;
     }
     private bool _rebuildingTree;
@@ -434,12 +485,14 @@ public sealed partial class RevisionDetailsViewModel(RepositoryViewModel repo, I
         _ = LoadPreviewAsync(value);
     }
 
-    private FileListItem? _previewFor;
+    /// <summary>プレビューを出しているコミットとファイル（絞り込みで行が作り直されても、同じファイルなら読み直さない）。</summary>
+    private (string? Sha, string Path, bool IsFolder)? _previewFor;
 
     private async Task LoadPreviewAsync(FileListItem? item)
     {
-        if (item is not null && item == _previewFor) return;
-        _previewFor = item;
+        var key = item is null ? ((string?, string, bool)?)null : (Commit?.Commit.Sha, item.Path, item.IsFolder);
+        if (key is not null && key == _previewFor) return;
+        _previewFor = key;
         if (item is null || item.IsFolder || Commit is not { } row || Reader is not { } reader) { PreviewText = null; PreviewTitle = ""; return; }
         var text = await reader.ReadFileTextAsync(row.Commit.Sha, item.Path);
         PreviewTitle = item.Path;

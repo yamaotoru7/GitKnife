@@ -5,7 +5,7 @@ namespace GitKnife.ViewModels;
 
 /// <summary>
 /// コミット一覧の Ctrl+F の検索パネル。
-/// 打つたびに読み込んだ一覧の中を探して今の行から下の一致を選ぶ。Enter で次、Shift+Enter で前（端では止まる）、Esc で閉じる。
+/// 打つたびに読み込んだ一覧の中を探して今の行から下の一致を選ぶ（前後の空白は除く）。Enter で次、Shift+Enter で前（端では止まる）、Esc で閉じる。
 /// 一致した文字は一覧で色を付け、一致した行は右端に印を出す。
 /// </summary>
 public sealed partial class CommitFindViewModel(RepositoryViewModel repo) : ObservableObject
@@ -44,7 +44,7 @@ public sealed partial class CommitFindViewModel(RepositoryViewModel repo) : Obse
     /// <summary>一覧を読み直したあと（開いていれば一致を数え直す。選択は動かさない）。</summary>
     public void Refresh(bool select)
     {
-        var q = IsOpen ? Query : "";
+        var q = IsOpen ? Query.Trim() : "";   // 貼り付けたハッシュの前後の空白は探す文字に入れない
         _matches = q.Length == 0 ? [] : repo.Commits
             .Select((row, i) => (row, i))
             .Where(x => CommitListFind.Matches(x.row.Commit, x.row.Labels.Select(l => l.Text), q))
